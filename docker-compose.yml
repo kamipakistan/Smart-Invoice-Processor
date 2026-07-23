@@ -57,6 +57,22 @@ services:
       timeout: 5s
       retries: 5
 
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: sip_langfuse
+    restart: always
+    ports:
+      - "4001:3000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/${POSTGRES_DB:-fbr_sip_db}
+      - NEXTAUTH_SECRET=sip-smart-invoice-secret-2026
+      - SALT=sip-smart-invoice-salt-2026
+      - ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
+      - NEXTAUTH_URL=http://localhost:4001
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   backend:
     build:
       context: ./backend

@@ -103,18 +103,29 @@ class LiteLLMAIProvider(BaseAIProvider):
         if settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY:
             try:
                 import langfuse  # noqa: F401
+                try:
+                    import langfuse.version  # noqa: F401
+                except ImportError:
+                    pass
+
+                # Ensure langfuse has a version attribute for older/newer LiteLLM integration compatibility
+                if not hasattr(langfuse, "version"):
+                    class _LangfuseVersion:
+                        __version__ = getattr(langfuse, "__version__", "2.0.0")
+                    setattr(langfuse, "version", _LangfuseVersion)
+
                 os.environ["LANGFUSE_PUBLIC_KEY"] = settings.LANGFUSE_PUBLIC_KEY
                 os.environ["LANGFUSE_SECRET_KEY"] = settings.LANGFUSE_SECRET_KEY
                 if settings.LANGFUSE_HOST:
                     os.environ["LANGFUSE_HOST"] = settings.LANGFUSE_HOST
                 litellm.success_callback = ["langfuse"]
                 litellm.failure_callback = ["langfuse"]
-            except ImportError:
+            except Exception as langfuse_err:
                 logger_service.log_sync(
-                    event="Langfuse Tracing Disabled",
+                    event="Langfuse Tracing Setup Warning",
                     level="WARNING",
                     category="AI_PROVIDER",
-                    message="LANGFUSE keys are set in settings, but 'langfuse' Python module is not installed."
+                    message=f"LANGFUSE configuration notice ({langfuse_err}). Tracing disabled."
                 )
 
         start_time = time.time()

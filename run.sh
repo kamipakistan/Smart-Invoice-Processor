@@ -23,11 +23,25 @@ elif [ -f ".env.example" ]; then
     set +a
 fi
 
-# 2. Boot Docker Infrastructure (Postgres, Redis, MinIO)
-echo "[*] Booting containerized infrastructure (Postgres, Redis, MinIO)..."
-docker compose stop backend frontend &>/dev/null || true
-docker rm -f sip_backend sip_frontend &>/dev/null || true
-docker compose up -d --wait postgres redis minio 2>/dev/null || docker compose up -d postgres redis minio
+# 2. Boot Docker Infrastructure (Postgres, Redis, MinIO, Langfuse if enabled locally)
+if [ -n "$LANGFUSE_PUBLIC_KEY" ] && [ -n "$LANGFUSE_SECRET_KEY" ]; then
+    if [[ "${LANGFUSE_HOST}" == *":4001"* ]]; then
+        echo "[*] Booting containerized infrastructure (Postgres, Redis, MinIO, Langfuse)..."
+        docker compose stop backend frontend &>/dev/null || true
+        docker rm -f sip_backend sip_frontend &>/dev/null || true
+        docker compose up -d --wait postgres redis minio langfuse 2>/dev/null || docker compose up -d postgres redis minio langfuse
+    else
+        echo "[*] Booting containerized infrastructure (Postgres, Redis, MinIO) [Using existing Langfuse at ${LANGFUSE_HOST}]..."
+        docker compose stop backend frontend &>/dev/null || true
+        docker rm -f sip_backend sip_frontend &>/dev/null || true
+        docker compose up -d --wait postgres redis minio 2>/dev/null || docker compose up -d postgres redis minio
+    fi
+else
+    echo "[*] Booting containerized infrastructure (Postgres, Redis, MinIO)..."
+    docker compose stop backend frontend &>/dev/null || true
+    docker rm -f sip_backend sip_frontend &>/dev/null || true
+    docker compose up -d --wait postgres redis minio 2>/dev/null || docker compose up -d postgres redis minio
+fi
 
 # 3. Virtual Environment & Dependencies Setup
 if [ ! -d "venv" ]; then
@@ -176,6 +190,9 @@ echo "    FastAPI Backend  : http://localhost:8000 (PID: ${FASTAPI_PID})"
 echo "    API OpenAPI Docs : http://localhost:8000/docs"
 echo "    React Frontend   : http://localhost:5173 (PID: ${FRONTEND_PID})"
 echo "    MinIO Storage    : http://localhost:9001 (User: minioadmin)"
+if [ -n "$LANGFUSE_PUBLIC_KEY" ] && [ -n "$LANGFUSE_SECRET_KEY" ]; then
+    echo "    Langfuse Tracing : ${LANGFUSE_HOST:-http://localhost:4001}"
+fi
 echo ""
 echo "[*] Press Ctrl+C to stop all development services."
 
