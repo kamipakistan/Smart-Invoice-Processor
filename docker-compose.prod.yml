@@ -60,13 +60,13 @@ services:
     restart: always
     mem_limit: 1g
     ports:
-      - "4001:3000"
+      - "${LANGFUSE_PORT:-4001}:3000"
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/langfuse
-      - NEXTAUTH_SECRET=sip-smart-invoice-secret-2026
-      - SALT=sip-smart-invoice-salt-2026
-      - ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
-      - NEXTAUTH_URL=http://localhost:4001
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-sip-smart-invoice-secret-2026}
+      - SALT=${LANGFUSE_SALT:-sip-smart-invoice-salt-2026}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      - NEXTAUTH_URL=${LANGFUSE_PUBLIC_HOST:-http://localhost:4001}
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,8 +103,10 @@ services:
       - BATCH_INGESTION_ROOT=${BATCH_INGESTION_ROOT:-/data/ingestion}
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
-      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse:3000}
       - LANGFUSE_PUBLIC_HOST=${LANGFUSE_PUBLIC_HOST:-http://localhost:4001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -146,8 +148,10 @@ services:
       - BATCH_INGESTION_ROOT=${BATCH_INGESTION_ROOT:-/data/ingestion}
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
-      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse:3000}
       - LANGFUSE_PUBLIC_HOST=${LANGFUSE_PUBLIC_HOST:-http://localhost:4001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     dns:
       - 8.8.8.8
       - 1.1.1.1

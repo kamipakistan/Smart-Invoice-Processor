@@ -345,6 +345,7 @@ services:
     volumes:
       - /mnt/sip_storage/postgres_data:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./init-scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-fbr_sip_db}" ]
       interval: 5s
@@ -390,13 +391,13 @@ services:
     restart: always
     mem_limit: 1g
     ports:
-      - "4001:3000"
+      - "${LANGFUSE_PORT:-4001}:3000"
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/${POSTGRES_DB:-fbr_sip_db}
-      - NEXTAUTH_SECRET=sip-smart-invoice-secret-2026
-      - SALT=sip-smart-invoice-salt-2026
-      - ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
-      - NEXTAUTH_URL=http://localhost:4001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/langfuse
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-sip-smart-invoice-secret-2026}
+      - SALT=${LANGFUSE_SALT:-sip-smart-invoice-salt-2026}
+      - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      - NEXTAUTH_URL=${LANGFUSE_PUBLIC_HOST:-http://localhost:4001}
     depends_on:
       postgres:
         condition: service_healthy
