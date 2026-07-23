@@ -57,3 +57,28 @@ CREATE INDEX IF NOT EXISTS idx_invoice_headers_batch_id ON invoice_headers(batch
 CREATE INDEX IF NOT EXISTS idx_invoice_headers_status ON invoice_headers(status);
 CREATE INDEX IF NOT EXISTS idx_invoice_headers_fbr_no ON invoice_headers(fbr_invoice_no);
 CREATE INDEX IF NOT EXISTS idx_line_items_invoice_id ON invoice_line_items(invoice_id);
+
+CREATE TABLE IF NOT EXISTS system_logs (
+    id BIGSERIAL PRIMARY KEY,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    level VARCHAR(16) NOT NULL DEFAULT 'INFO',
+    category VARCHAR(32) NOT NULL DEFAULT 'SYSTEM',
+    event VARCHAR(255) NOT NULL,
+    provider VARCHAR(32),
+    model_name VARCHAR(128),
+    prompt_tokens INT,
+    completion_tokens INT,
+    total_tokens INT,
+    latency_ms DOUBLE PRECISION,
+    invoice_id INT REFERENCES invoice_headers(id) ON DELETE SET NULL,
+    batch_id VARCHAR(64),
+    message TEXT,
+    metadata_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_system_logs_timestamp ON system_logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level);
+CREATE INDEX IF NOT EXISTS idx_system_logs_category ON system_logs(category);
+CREATE INDEX IF NOT EXISTS idx_system_logs_provider ON system_logs(provider);
+CREATE INDEX IF NOT EXISTS idx_system_logs_invoice_id ON system_logs(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_system_logs_batch_id ON system_logs(batch_id);

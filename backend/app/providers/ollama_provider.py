@@ -1,10 +1,13 @@
+import time
 import base64
 import json
 import httpx
+import traceback
 from typing import List
 from app.providers.base_provider import BaseAIProvider
 from app.schemas.extraction import InvoiceExtractionSchema
 from app.config import settings
+from app.services.logger_service import logger_service
 
 SYSTEM_PROMPT = """
 You are an expert FBR (Federal Board of Revenue, Pakistan) Digital Invoice Parser.
@@ -53,24 +56,70 @@ RULES:
 class OllamaAIProvider(BaseAIProvider):
     def extract_invoice_data(self, image_bytes_list: List[bytes]) -> InvoiceExtractionSchema:
         images_b64 = [base64.b64encode(img).decode("utf-8") for img in image_bytes_list]
+        model_name = settings.OLLAMA_MODEL
         
         payload = {
-            "model": settings.OLLAMA_MODEL,
+            "model": model_name,
             "prompt": SYSTEM_PROMPT.strip(),
             "images": images_b64,
             "stream": False,
             "format": "json"
         }
 
+        start_time = time.time()
         try:
             with httpx.Client(timeout=120.0) as client:
                 res = client.post(f"{settings.OLLAMA_HOST}/api/generate", json=payload)
+                latency_ms = round((time.time() - start_time) * 1000, 2)
+                
                 if res.status_code == 200:
                     data = res.json()
                     response_text = data.get("response", "{}")
                     parsed = json.loads(response_text)
+                    
+                    # Ollama returns token evaluation statistics
+                    prompt_tokens = data.get("prompt_eval_count", 0)
+                    completion_tokens = data.get("eval_count", 0)
+                    total_tokens = prompt_tokens + completion_tokens
+
+                    logger_service.log_sync(
+                        event="Ollama Vision Extraction Succeeded",
+                        level="INFO",
+                        category="AI_PROVIDER",
+                        provider="ollama",
+                        model_name=model_name,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=total_tokens,
+                        latency_ms=latency_ms,
+                        message=f"Ollama successfully parsed invoice using {model_name} in {latency_ms}ms. Tokens: {total_tokens}.",
+                        metadata={"images_count": len(image_bytes_list)}
+                    )
+
                     return InvoiceExtractionSchema(**parsed)
+                else:
+                    logger_service.log_sync(
+                        event="Ollama HTTP Error",
+                        level="ERROR",
+                        category="AI_PROVIDER",
+                        provider="ollama",
+                        model_name=model_name,
+                        latency_ms=latency_ms,
+                        message=f"Ollama returned non-200 HTTP status code {res.status_code}: {res.text}",
+                        metadata={"status_code": res.status_code}
+                    )
         except Exception as e:
+            latency_ms = round((time.time() - start_time) * 1000, 2)
+            stack_trace = traceback.format_exc()
+            logger_service.log_sync(
+                event="Ollama Connection Failure",
+                level="ERROR",
+                category="AI_PROVIDER",
+                provider="ollama",
+                model_name=model_name,
+                latency_ms=latency_ms,
+                message=f"Failed to communicate with Ollama server ({settings.OLLAMA_HOST}): {e}\n\nTraceback:\n{stack_trace}"
+            )
             print(f"Ollama Provider Error: {e}")
         
         return InvoiceExtractionSchema()

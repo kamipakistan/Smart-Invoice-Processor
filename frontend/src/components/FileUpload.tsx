@@ -73,7 +73,10 @@ export default function FileUpload({ onUploadSuccess, apiBase }: FileUploadProps
       onUploadSuccess(data.batch_id);
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err.message || 'Error uploading files to server.');
+      const msg = err.message === 'Failed to fetch'
+        ? `Failed to fetch: Backend server at ${apiBase} is unreachable. Please ensure FastAPI service is running.`
+        : (err.message || 'Error uploading files to server.');
+      setErrorMsg(msg);
     } finally {
       setUploading(false);
     }

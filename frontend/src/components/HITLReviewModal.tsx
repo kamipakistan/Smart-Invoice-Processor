@@ -48,7 +48,7 @@ export default function HITLReviewModal({
       setShowRejectDialog(false);
       setRejectionReason('');
     }
-  }, [invoice]);
+  }, [invoice?.id]);
 
   const handleLineItemChange = (index: number, field: keyof LineItem, value: any) => {
     setLineItems(prev => {
@@ -111,7 +111,10 @@ export default function HITLReviewModal({
       onClose();
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err.message || 'Error saving corrections.');
+      const msg = err.message === 'Failed to fetch'
+        ? `Failed to fetch: Backend server at ${apiBase} is unreachable. Please ensure FastAPI service is running.`
+        : (err.message || 'Error saving corrections.');
+      setErrorMsg(msg);
     } finally {
       setSubmitting(false);
     }
@@ -141,7 +144,10 @@ export default function HITLReviewModal({
       onClose();
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err.message || 'Error rejecting document.');
+      const msg = err.message === 'Failed to fetch'
+        ? `Failed to fetch: Backend server at ${apiBase} is unreachable. Please ensure FastAPI service is running.`
+        : (err.message || 'Error rejecting document.');
+      setErrorMsg(msg);
     } finally {
       setRejecting(false);
       setShowRejectDialog(false);
@@ -183,7 +189,7 @@ export default function HITLReviewModal({
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
           {/* Left Pane: PDF Document Viewer */}
           <div className="lg:col-span-5 border-r border-slate-800 p-4 h-full bg-slate-950/50">
-            <PDFViewer url={invoice.pdf_url} fileName={invoice.raw_file_name} />
+            <PDFViewer url={invoice.pdf_url} fileName={invoice.raw_file_name} apiBase={apiBase} />
           </div>
 
           {/* Right Pane: 16-Field Editor Form */}
@@ -455,7 +461,11 @@ export default function HITLReviewModal({
               <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setShowRejectDialog(true)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowRejectDialog(true);
+                  }}
                   className="flex items-center gap-1.5 bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 px-4 py-2 rounded-lg text-sm transition-all"
                 >
                   <XCircle className="w-4 h-4" />
@@ -492,8 +502,8 @@ export default function HITLReviewModal({
 
         {/* Inline Rejection Reason Prompt Modal */}
         {showRejectDialog && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
-            <div className="bg-slate-900 border border-red-800/80 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+          <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md" onClick={e => { e.preventDefault(); e.stopPropagation(); }}>
+            <div className="bg-slate-900 border border-red-800/80 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
               <div className="flex items-center gap-3 text-red-400">
                 <XCircle className="w-6 h-6" />
                 <h4 className="text-lg font-bold text-white">Reject Document</h4>

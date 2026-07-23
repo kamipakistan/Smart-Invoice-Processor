@@ -11,52 +11,101 @@ import {
   Database,
   Cpu,
   Layers,
-  CheckCircle2
+  CheckCircle2,
+  Terminal
 } from 'lucide-react';
 import UploadView from './views/UploadView';
 import ReviewView from './views/ReviewView';
 import ReportsView from './views/ReportsView';
+import LogsView from './views/LogsView';
 import type { InvoiceHeader } from './types';
 
-const getApiBase = () => {
+const getDefaultApiBase = () => {
   const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
-  if (envUrl && envUrl !== 'http://localhost:8001') return envUrl;
-  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-    return `http://${window.location.hostname}:8001`;
+  if (envUrl) return envUrl;
+  if (typeof window !== 'undefined' && window.location) {
+    const hostname = window.location.hostname || 'localhost';
+    const port = window.location.port;
+    if (port === '3001' || port === '8001') {
+      return `${window.location.protocol}//${hostname}:8001`;
+    }
+    return `${window.location.protocol}//${hostname}:8000`;
   }
-  return 'http://localhost:8001';
+  return 'http://localhost:8000';
 };
 
-const API_BASE = getApiBase();
-
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'upload' | 'review' | 'reports'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'review' | 'reports' | 'logs'>('upload');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState<boolean>(false);
+
+  const [apiBase, setApiBase] = useState<string>(getDefaultApiBase());
+  const [activePort, setActivePort] = useState<number>(() => {
+    const initial = getDefaultApiBase();
+    const match = initial.match(/:(\d+)/);
+    return match ? parseInt(match[1], 10) : 8000;
+  });
 
   const [pendingReviewCount, setPendingReviewCount] = useState<number>(0);
   const [backendOnline, setBackendOnline] = useState<boolean>(true);
 
-  // Poll pending exceptions count
+  // Poll pending exceptions count & probe port candidates if primary fails
   const fetchExceptionsCount = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/invoices/exceptions`);
-      if (res.ok) {
-        const data: InvoiceHeader[] = await res.json();
-        setPendingReviewCount(data.length);
-        setBackendOnline(true);
+    const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
+    if (envUrl) {
+      try {
+        const res = await fetch(`${envUrl}/api/v1/invoices/exceptions`);
+        if (res.ok) {
+          const data: InvoiceHeader[] = await res.json();
+          setPendingReviewCount(data.length);
+          setBackendOnline(true);
+          setApiBase(envUrl);
+          return;
+        }
+      } catch (err) {
+        setBackendOnline(false);
       }
-    } catch (err) {
-      console.error('Error connecting to backend:', err);
-      setBackendOnline(false);
+      return;
     }
+
+    const hostname = typeof window !== 'undefined' ? window.location.hostname || 'localhost' : 'localhost';
+    const protocol = typeof window !== 'undefined' ? window.location.protocol || 'http:' : 'http:';
+    const candidates = [
+      apiBase,
+      `${protocol}//${hostname}:8000`,
+      `${protocol}//${hostname}:8001`,
+    ];
+
+    const uniqueCandidates = Array.from(new Set(candidates.filter(Boolean)));
+
+    for (const candidate of uniqueCandidates) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const res = await fetch(`${candidate}/api/v1/invoices/exceptions`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data: InvoiceHeader[] = await res.json();
+          setPendingReviewCount(data.length);
+          setBackendOnline(true);
+          setApiBase(candidate);
+          const match = candidate.match(/:(\d+)/);
+          if (match) setActivePort(parseInt(match[1], 10));
+          return;
+        }
+      } catch (err) {
+        // try next candidate port
+      }
+    }
+    setBackendOnline(false);
   };
 
   useEffect(() => {
     fetchExceptionsCount();
-    const interval = setInterval(fetchExceptionsCount, 8000);
+    const interval = setInterval(fetchExceptionsCount, 6000);
     return () => clearInterval(interval);
-  }, []);
+  }, [apiBase]);
 
   const navItems = [
     {
@@ -77,6 +126,12 @@ export default function App() {
       label: 'Export Reports',
       icon: FileSpreadsheet,
       description: 'Download 16-column Excel reports',
+    },
+    {
+      id: 'logs',
+      label: 'System & AI Logs',
+      icon: Terminal,
+      description: 'Model telemetry, token usage & errors',
     },
   ];
 
@@ -100,8 +155,9 @@ export default function App() {
 
       {/* Left Sidebar Navigation Component */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 bg-slate-900/95 border-r border-slate-800 flex flex-col justify-between transition-all duration-300 ${sidebarCollapsed ? 'w-20' : 'w-64'
-          } ${mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        className={`fixed lg:static inset-y-0 left-0 z-50 bg-slate-900/95 border-r border-slate-800 flex flex-col justify-between transition-all duration-300 ${
+          sidebarCollapsed ? 'w-20' : 'w-64'
+        } ${mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Sidebar Header: Logo & Branding */}
         <div>
@@ -143,10 +199,11 @@ export default function App() {
                     setActiveTab(item.id as any);
                     setMobileDrawerOpen(false);
                   }}
-                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl font-medium text-xs transition-all relative group ${isActive
-                    ? 'bg-gradient-to-r from-cyan-600/20 to-blue-600/10 text-cyan-400 border border-cyan-500/30 shadow-md shadow-cyan-500/10'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
-                    }`}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl font-medium text-xs transition-all relative group ${
+                    isActive
+                      ? 'bg-gradient-to-r from-cyan-600/20 to-blue-600/10 text-cyan-400 border border-cyan-500/30 shadow-md shadow-cyan-500/10'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  }`}
                   title={sidebarCollapsed ? item.label : undefined}
                 >
                   <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-cyan-400' : 'text-slate-400 group-hover:text-slate-200'}`} />
@@ -160,10 +217,11 @@ export default function App() {
 
                   {item.badge !== null && item.badge !== undefined && (
                     <span
-                      className={`shrink-0 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${isActive
-                        ? 'bg-amber-500 text-slate-950'
-                        : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                        }`}
+                      className={`shrink-0 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                        isActive
+                          ? 'bg-amber-500 text-slate-950'
+                          : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      }`}
                     >
                       {item.badge}
                     </span>
@@ -189,7 +247,7 @@ export default function App() {
                 </span>
               </div>
               <div className="text-[10px] text-slate-500 font-mono">
-                Port 8001 • Postgres: 5434
+                Port {activePort} • Postgres: 5434
               </div>
             </div>
           ) : (
@@ -225,9 +283,10 @@ export default function App() {
 
         {/* Tab Content Views */}
         <div className="p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
-          {activeTab === 'upload' && <UploadView apiBase={API_BASE} onUploadComplete={fetchExceptionsCount} />}
-          {activeTab === 'review' && <ReviewView apiBase={API_BASE} onReviewResolved={fetchExceptionsCount} />}
-          {activeTab === 'reports' && <ReportsView apiBase={API_BASE} />}
+          {activeTab === 'upload' && <UploadView apiBase={apiBase} onUploadComplete={fetchExceptionsCount} />}
+          {activeTab === 'review' && <ReviewView apiBase={apiBase} onReviewResolved={fetchExceptionsCount} />}
+          {activeTab === 'reports' && <ReportsView apiBase={apiBase} />}
+          {activeTab === 'logs' && <LogsView apiBase={apiBase} />}
         </div>
       </main>
     </div>

@@ -11,9 +11,11 @@ from sqlalchemy import func
 from app.database import get_async_db
 from app.config import settings, get_pkt_now, get_pkt_today_iso
 from app.models.invoice import InvoiceHeader, InvoiceLineItem, BatchRecord
+from app.models.system_log import SystemLog
 from app.schemas.extraction import InvoiceHeaderResponse, InvoiceUpdateRequest, BatchStatusResponse, LineItemSchema
 from app.services.minio_service import minio_service
 from app.services.excel_service import generate_flat_excel_report
+from app.services.logger_service import logger_service
 from app.tasks.celery_worker import process_invoice_pipeline
 
 router = APIRouter()
@@ -157,7 +159,7 @@ async def list_invoices(
     
     output = []
     for h in headers:
-        pdf_url = minio_service.get_presigned_url(settings.MINIO_BUCKET_RAW, h.minio_raw_object)
+        pdf_url = f"/api/v1/invoices/{h.id}/document"
         h_dict = {
             "id": h.id,
             "batch_id": h.batch_id,
@@ -192,6 +194,31 @@ async def list_invoices(
         output.append(h_dict)
 
     return output
+
+@router.get("/invoices/{invoice_id}/document")
+async def get_invoice_document(invoice_id: int, db: AsyncSession = Depends(get_async_db)):
+    """
+    Proxy endpoint to stream PDF invoice document directly from MinIO storage.
+    Prevents CORS/host mismatch issues when viewing invoices in the frontend.
+    """
+    result = await db.execute(select(InvoiceHeader).where(InvoiceHeader.id == invoice_id))
+    header = result.scalars().first()
+    if not header or not header.minio_raw_object:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    try:
+        file_bytes = minio_service.get_file_bytes(settings.MINIO_BUCKET_RAW, header.minio_raw_object)
+        return Response(
+            content=file_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="{header.raw_file_name}"',
+                "Access-Control-Allow-Origin": "*",
+                "Content-Type": "application/pdf"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch document from storage: {str(e)}")
 
 @router.get("/invoices/exceptions")
 async def list_exceptions(db: AsyncSession = Depends(get_async_db)):
@@ -315,3 +342,180 @@ async def export_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+@router.get("/logs")
+async def list_system_logs(
+    level: Optional[str] = None,
+    category: Optional[str] = None,
+    provider: Optional[str] = None,
+    invoice_id: Optional[int] = None,
+    batch_id: Optional[str] = None,
+    search: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Paginated logs endpoint with multi-criteria filtering for system, API, and AI execution logs.
+    """
+    query = select(SystemLog).order_by(SystemLog.id.desc())
+    count_query = select(func.count(SystemLog.id))
+
+    if level and level.upper() != "ALL":
+        query = query.where(SystemLog.level == level.upper())
+        count_query = count_query.where(SystemLog.level == level.upper())
+
+    if category and category.upper() != "ALL":
+        query = query.where(SystemLog.category == category.upper())
+        count_query = count_query.where(SystemLog.category == category.upper())
+
+    if provider and provider.lower() != "all":
+        query = query.where(SystemLog.provider == provider.lower())
+        count_query = count_query.where(SystemLog.provider == provider.lower())
+
+    if invoice_id:
+        query = query.where(SystemLog.invoice_id == invoice_id)
+        count_query = count_query.where(SystemLog.invoice_id == invoice_id)
+
+    if batch_id:
+        query = query.where(SystemLog.batch_id == batch_id)
+        count_query = count_query.where(SystemLog.batch_id == batch_id)
+
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.where(
+            (SystemLog.event.ilike(search_pattern)) |
+            (SystemLog.message.ilike(search_pattern)) |
+            (SystemLog.model_name.ilike(search_pattern))
+        )
+        count_query = count_query.where(
+            (SystemLog.event.ilike(search_pattern)) |
+            (SystemLog.message.ilike(search_pattern)) |
+            (SystemLog.model_name.ilike(search_pattern))
+        )
+
+    if start_date:
+        query = query.where(func.to_char(SystemLog.timestamp, 'YYYY-MM-DD') >= start_date)
+        count_query = count_query.where(func.to_char(SystemLog.timestamp, 'YYYY-MM-DD') >= start_date)
+
+    if end_date:
+        query = query.where(func.to_char(SystemLog.timestamp, 'YYYY-MM-DD') <= end_date)
+        count_query = count_query.where(func.to_char(SystemLog.timestamp, 'YYYY-MM-DD') <= end_date)
+
+    total_res = await db.execute(count_query)
+    total_count = total_res.scalar_one()
+
+    page_val = int(page.default) if hasattr(page, 'default') else int(page)
+    limit_val = int(limit.default) if hasattr(limit, 'default') else int(limit)
+
+    offset = (page_val - 1) * limit_val
+    query = query.offset(offset).limit(limit_val)
+    res = await db.execute(query)
+    logs = res.scalars().all()
+
+    items = []
+    for log in logs:
+        items.append({
+            "id": log.id,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+            "level": log.level,
+            "category": log.category,
+            "event": log.event,
+            "provider": log.provider,
+            "model_name": log.model_name,
+            "prompt_tokens": log.prompt_tokens,
+            "completion_tokens": log.completion_tokens,
+            "total_tokens": log.total_tokens,
+            "latency_ms": log.latency_ms,
+            "invoice_id": log.invoice_id,
+            "batch_id": log.batch_id,
+            "message": log.message,
+            "metadata_json": log.metadata_json
+        })
+
+    return {
+        "items": items,
+        "total": total_count,
+        "page": page_val,
+        "limit": limit_val,
+        "pages": (total_count + limit_val - 1) // limit_val if limit_val > 0 else 1
+    }
+
+@router.get("/logs/stats")
+async def get_log_stats(db: AsyncSession = Depends(get_async_db)):
+    """
+    Returns aggregated metrics and token usage analytics for the Log Tab dashboard.
+    """
+    total_logs_res = await db.execute(select(func.count(SystemLog.id)))
+    total_logs = total_logs_res.scalar_one()
+
+    error_logs_res = await db.execute(
+        select(func.count(SystemLog.id)).where(SystemLog.level.in_(["ERROR", "CRITICAL"]))
+    )
+    error_count = error_logs_res.scalar_one()
+
+    rate_limit_res = await db.execute(
+        select(func.count(SystemLog.id)).where(SystemLog.event.ilike("%rate limit%") | SystemLog.event.ilike("%quota%"))
+    )
+    rate_limit_count = rate_limit_res.scalar_one()
+
+    tokens_res = await db.execute(
+        select(
+            func.coalesce(func.sum(SystemLog.prompt_tokens), 0),
+            func.coalesce(func.sum(SystemLog.completion_tokens), 0),
+            func.coalesce(func.sum(SystemLog.total_tokens), 0),
+            func.avg(SystemLog.latency_ms)
+        ).where(SystemLog.category == "AI_PROVIDER")
+    )
+    prompt_tokens, completion_tokens, total_tokens, avg_latency = tokens_res.one()
+
+    # Determine active AI Provider & Model name from settings
+    provider_type = settings.AI_PROVIDER.lower()
+    if provider_type == "gemini":
+        active_model = settings.GEMINI_MODEL
+    elif provider_type == "anthropic":
+        active_model = settings.ANTHROPIC_MODEL
+    elif provider_type == "ollama":
+        active_model = settings.OLLAMA_MODEL
+    else:
+        active_model = settings.OPENAI_MODEL
+
+    # Determine health status based on recent errors (last 10 AI provider logs)
+    recent_ai_logs_res = await db.execute(
+        select(SystemLog)
+        .where(SystemLog.category == "AI_PROVIDER")
+        .order_by(SystemLog.id.desc())
+        .limit(10)
+    )
+    recent_ai_logs = recent_ai_logs_res.scalars().all()
+    recent_errors = sum(1 for log in recent_ai_logs if log.level in ["ERROR", "CRITICAL"])
+    model_status = "ERROR" if recent_errors >= 3 else ("WARNING" if recent_errors > 0 else "OPERATIONAL")
+
+    return {
+        "active_provider": provider_type,
+        "active_model": active_model,
+        "model_status": model_status,
+        "total_logs": total_logs,
+        "error_count": error_count,
+        "rate_limit_count": rate_limit_count,
+        "prompt_tokens": int(prompt_tokens),
+        "completion_tokens": int(completion_tokens),
+        "total_tokens": int(total_tokens),
+        "avg_latency_ms": round(float(avg_latency), 2) if avg_latency is not None else 0.0
+    }
+
+@router.delete("/logs/clear")
+async def clear_logs(days: Optional[int] = Query(None, description="Clear logs older than N days. Omit to clear all."), db: AsyncSession = Depends(get_async_db)):
+    """
+    Clears system logs. If days parameter is provided, deletes logs older than N days.
+    """
+    if days is not None and days > 0:
+        cutoff = get_pkt_now() - datetime.timedelta(days=days)
+        await db.execute(SystemLog.__table__.delete().where(SystemLog.timestamp < cutoff))
+    else:
+        await db.execute(SystemLog.__table__.delete())
+    
+    await db.commit()
+    return {"message": "Logs successfully cleared."}

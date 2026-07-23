@@ -1,11 +1,14 @@
 import os
+import time
 import base64
 import json
+import traceback
 from typing import List
 import litellm
 from app.providers.base_provider import BaseAIProvider
 from app.schemas.extraction import InvoiceExtractionSchema
 from app.config import settings
+from app.services.logger_service import logger_service
 
 SYSTEM_PROMPT = """
 You are an expert FBR (Federal Board of Revenue, Pakistan) Digital Invoice Parser.
@@ -94,6 +97,9 @@ class LiteLLMAIProvider(BaseAIProvider):
             "temperature": 0.0,
         }
 
+        if api_key:
+            kwargs["api_key"] = api_key
+
         if settings.LANGFUSE_PUBLIC_KEY and settings.LANGFUSE_SECRET_KEY:
             os.environ["LANGFUSE_PUBLIC_KEY"] = settings.LANGFUSE_PUBLIC_KEY
             os.environ["LANGFUSE_SECRET_KEY"] = settings.LANGFUSE_SECRET_KEY
@@ -102,11 +108,60 @@ class LiteLLMAIProvider(BaseAIProvider):
             litellm.success_callback = ["langfuse"]
             litellm.failure_callback = ["langfuse"]
 
+        start_time = time.time()
         try:
             response = litellm.completion(**kwargs)
+            latency_ms = round((time.time() - start_time) * 1000, 2)
+            
             raw_text = response.choices[0].message.content
             data = json.loads(raw_text)
+            
+            # Extract token usage telemetry
+            usage = getattr(response, "usage", None)
+            prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
+            completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
+            total_tokens = getattr(usage, "total_tokens", 0) if usage else (prompt_tokens + completion_tokens)
+
+            # Log successful extraction to database
+            logger_service.log_sync(
+                event="AI Vision Extraction Succeeded",
+                level="INFO",
+                category="AI_PROVIDER",
+                provider=provider_type,
+                model_name=model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                message=f"Successfully extracted invoice data using {model_name} in {latency_ms}ms. Total Tokens: {total_tokens} (Prompt: {prompt_tokens}, Completion: {completion_tokens}).",
+                metadata={"images_count": len(image_bytes_list), "raw_response_len": len(raw_text)}
+            )
+
             return InvoiceExtractionSchema(**data)
         except Exception as e:
+            latency_ms = round((time.time() - start_time) * 1000, 2)
+            err_str = str(e)
+            stack_trace = traceback.format_exc()
+            
+            # Detect Rate Limit / Quota / Token limit exceeded errors
+            is_rate_limit = "429" in err_str or "quota" in err_str.lower() or "rate limit" in err_str.lower() or "token" in err_str.lower()
+            level = "ERROR" if not is_rate_limit else "CRITICAL"
+            event_title = "AI Model Quota / Rate Limit Exceeded" if is_rate_limit else "AI Vision Extraction Failed"
+
+            logger_service.log_sync(
+                event=event_title,
+                level=level,
+                category="AI_PROVIDER",
+                provider=provider_type,
+                model_name=model_name,
+                latency_ms=latency_ms,
+                message=f"Error executing AI provider ({provider_type} - {model_name}): {err_str}\n\nTraceback:\n{stack_trace}",
+                metadata={
+                    "images_count": len(image_bytes_list),
+                    "is_rate_limit": is_rate_limit,
+                    "error_class": e.__class__.__name__
+                }
+            )
+
             print(f"LiteLLM Provider Error (Provider: {provider_type}, Model: {model_name}): {e}")
             return InvoiceExtractionSchema()

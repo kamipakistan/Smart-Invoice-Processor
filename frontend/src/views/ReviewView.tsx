@@ -161,7 +161,7 @@ export default function ReviewView({ apiBase, onReviewResolved }: ReviewViewProp
 
                   {/* Inline PDF Preview */}
                   <div className="flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-800">
-                    <PDFViewer url={activeInvoice.pdf_url} fileName={activeInvoice.raw_file_name} />
+                    <PDFViewer url={activeInvoice.pdf_url} fileName={activeInvoice.raw_file_name} apiBase={apiBase} />
                   </div>
                 </div>
               </>

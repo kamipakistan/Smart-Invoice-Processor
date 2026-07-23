@@ -1,5 +1,6 @@
 import io
 import json
+import traceback
 from celery import Celery
 from pdf2image import convert_from_bytes
 from app.config import settings, get_pkt_today_iso
@@ -7,6 +8,7 @@ from app.database import SyncSessionLocal
 from app.models.invoice import InvoiceHeader, InvoiceLineItem, BatchRecord
 from app.services.minio_service import minio_service
 from app.services.metacognition import MetacognitionEngine
+from app.services.logger_service import logger_service
 from app.providers import get_ai_provider
 
 celery_app = Celery(
@@ -29,11 +31,26 @@ def process_invoice_pipeline(self, invoice_id: int):
     try:
         header = session.query(InvoiceHeader).filter(InvoiceHeader.id == invoice_id).first()
         if not header:
-            print(f"Invoice record #{invoice_id} not found.")
+            logger_service.log_sync(
+                event="Invoice Record Not Found",
+                level="WARNING",
+                category="CELERY_PIPELINE",
+                invoice_id=invoice_id,
+                message=f"Celery task attempted to process invoice #{invoice_id}, but record was not found in database."
+            )
             return
 
         header.status = "PROCESSING"
         session.commit()
+
+        logger_service.log_sync(
+            event="Invoice Ingestion Started",
+            level="INFO",
+            category="CELERY_PIPELINE",
+            invoice_id=header.id,
+            batch_id=header.batch_id,
+            message=f"Started ingestion pipeline for invoice #{header.id} ({header.raw_file_name})."
+        )
 
         # 1. Fetch raw PDF from MinIO
         file_bytes = minio_service.get_file_bytes(settings.MINIO_BUCKET_RAW, header.minio_raw_object)
@@ -47,7 +64,14 @@ def process_invoice_pipeline(self, invoice_id: int):
                 img.save(buf, format="PNG")
                 img_bytes_list.append(buf.getvalue())
         except Exception as pdf_err:
-            print(f"PDF rendering error: {pdf_err}")
+            logger_service.log_sync(
+                event="PDF Rendering Failed",
+                level="ERROR",
+                category="CELERY_PIPELINE",
+                invoice_id=header.id,
+                batch_id=header.batch_id,
+                message=f"Failed to render PDF to PNG images for invoice #{header.id}: {pdf_err}"
+            )
             img_bytes_list = []
 
         # 3. Vision LLM Extraction
@@ -112,11 +136,31 @@ def process_invoice_pipeline(self, invoice_id: int):
                 batch.status = "COMPLETED"
             session.commit()
 
+        log_lvl = "INFO" if status in ["COMPLETED", "MANUALLY_VERIFIED"] else ("WARNING" if status == "NEEDS_REVIEW" else "ERROR")
+        logger_service.log_sync(
+            event=f"Invoice Pipeline Evaluated: {status}",
+            level=log_lvl,
+            category="CELERY_PIPELINE",
+            invoice_id=header.id,
+            batch_id=header.batch_id,
+            message=f"Pipeline finished for invoice #{header.id}. Status: {status}, Confidence: {round(confidence, 2)}. Missing reasons: {missing_reasons}"
+        )
+
         return {"invoice_id": invoice_id, "status": status, "missing_reasons": missing_reasons, "confidence": confidence}
 
     except Exception as e:
         session.rollback()
-        print(f"Error processing invoice #{invoice_id}: {e}")
+        err_msg = str(e)
+        stack_trace = traceback.format_exc()
+        
+        logger_service.log_sync(
+            event="Invoice Ingestion Exception",
+            level="ERROR",
+            category="CELERY_PIPELINE",
+            invoice_id=invoice_id,
+            message=f"Fatal exception during invoice #{invoice_id} pipeline execution: {err_msg}\n\nTraceback:\n{stack_trace}"
+        )
+        
         header = session.query(InvoiceHeader).filter(InvoiceHeader.id == invoice_id).first()
         if header:
             header.status = "FAILED"
