@@ -59,8 +59,8 @@ class Settings(BaseSettings):
     # Langfuse Telemetry & Observability
     LANGFUSE_PUBLIC_KEY: str = os.getenv("LANGFUSE_PUBLIC_KEY", "")
     LANGFUSE_SECRET_KEY: str = os.getenv("LANGFUSE_SECRET_KEY", "")
-    LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "http://localhost:4000")
-    LANGFUSE_PUBLIC_HOST: str = os.getenv("LANGFUSE_PUBLIC_HOST", "http://localhost:4000")
+    LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "http://localhost:4001")
+    LANGFUSE_PUBLIC_HOST: str = os.getenv("LANGFUSE_PUBLIC_HOST", "http://localhost:4001")
 
     class Config:
         case_sensitive = True

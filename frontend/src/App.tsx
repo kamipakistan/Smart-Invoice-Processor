@@ -20,11 +20,11 @@ import type { InvoiceHeader } from './types';
 
 const getApiBase = () => {
   const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
-  if (envUrl && envUrl !== 'http://localhost:8000') return envUrl;
+  if (envUrl && envUrl !== 'http://localhost:8001') return envUrl;
   if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-    return `http://${window.location.hostname}:8000`;
+    return `http://${window.location.hostname}:8001`;
   }
-  return 'http://localhost:8000';
+  return 'http://localhost:8001';
 };
 
 const API_BASE = getApiBase();
@@ -189,7 +189,7 @@ export default function App() {
                 </span>
               </div>
               <div className="text-[10px] text-slate-500 font-mono">
-                Port 8000 • Postgres: 5434
+                Port 8001 • Postgres: 5434
               </div>
             </div>
           ) : (

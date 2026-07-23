@@ -64,13 +64,13 @@ services:
     restart: always
     mem_limit: 1g
     ports:
-      - "4000:3000"
+      - "4001:3000"
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/${POSTGRES_DB:-fbr_sip_db}
       - NEXTAUTH_SECRET=sip-smart-invoice-secret-2026
       - SALT=sip-smart-invoice-salt-2026
       - ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
-      - NEXTAUTH_URL=http://localhost:4000
+      - NEXTAUTH_URL=http://localhost:4001
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,7 +82,7 @@ services:
     mem_limit: 2g
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       - TZ=Asia/Karachi
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/${POSTGRES_DB:-fbr_sip_db}
@@ -108,7 +108,7 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=http://langfuse:3000
-      - LANGFUSE_PUBLIC_HOST=${LANGFUSE_PUBLIC_HOST:-http://localhost:4000}
+      - LANGFUSE_PUBLIC_HOST=${LANGFUSE_PUBLIC_HOST:-http://localhost:4001}
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -151,7 +151,7 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=http://langfuse:3000
-      - LANGFUSE_PUBLIC_HOST=${LANGFUSE_PUBLIC_HOST:-http://localhost:4000}
+      - LANGFUSE_PUBLIC_HOST=${LANGFUSE_PUBLIC_HOST:-http://localhost:4001}
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -171,7 +171,7 @@ services:
     restart: always
     mem_limit: 256m
     ports:
-      - "3000:80"
+      - "3001:80"
     environment:
       - TZ=Asia/Karachi
     depends_on:
