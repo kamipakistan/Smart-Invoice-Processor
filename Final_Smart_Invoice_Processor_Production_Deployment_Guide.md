@@ -272,6 +272,47 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml ps
 ```
 
+### C.3 Run Database & MinIO Initialization Diagnostics (`setup_project.py`)
+
+Execute the bootstrap diagnostic script to verify database tables, create the MinIO buckets (`raw-invoices`, `processed-invoices`), test Redis connection, and validate AI provider settings:
+
+```bash
+cd /home/almoiz/smart-invoice-processor
+
+# Create host virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -r backend/requirements.txt
+
+# Execute setup and service diagnostics
+python3 setup_project.py
+```
+
+**Expected Diagnostic Output:**
+
+```text
+==================================================
+ Phase 2: Service Setup & Production Diagnostics 
+==================================================
+[*] Setting up PostgreSQL Database...
+    Connecting to: localhost:5434/fbr_sip_db
+[+] Database tables successfully initialized.
+
+[*] Setting up MinIO Object Storage...
+    Connecting to MinIO at: localhost:9010
+[+] Buckets 'raw-invoices' and 'processed-invoices' ready.
+
+[*] Checking Redis Connection...
+    Connecting to Redis at: redis://localhost:6380/0
+[+] Redis connection successful. Ping received.
+
+[*] Checking AI Provider Settings...
+    Selected Provider: GEMINI
+    Gemini Model: gemini-3.5-flash
+[+] Gemini API Key configured.
+==================================================
+```
+
 ---
 
 ## 7. PART D — Verification & Access Points

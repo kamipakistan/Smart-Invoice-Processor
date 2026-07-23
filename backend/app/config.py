@@ -1,7 +1,16 @@
 import os
 import zoneinfo
 import datetime
-from pydantic_settings import BaseSettings
+from pathlib import Path
+from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Load .env file from root or current working directory if present
+env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path, override=True)
+else:
+    load_dotenv(override=True)
 
 PKT_TZ = zoneinfo.ZoneInfo("Asia/Karachi")
 
@@ -62,7 +71,6 @@ class Settings(BaseSettings):
     LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "http://localhost:4001")
     LANGFUSE_PUBLIC_HOST: str = os.getenv("LANGFUSE_PUBLIC_HOST", "http://localhost:4001")
 
-    class Config:
-        case_sensitive = True
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()
