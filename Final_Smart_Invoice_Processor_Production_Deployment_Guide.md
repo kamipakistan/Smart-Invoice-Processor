@@ -342,11 +342,6 @@ services:
       TZ: Asia/Karachi
     volumes:
       - /mnt/sip_storage/minio_data:/data
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   langfuse:
     image: langfuse/langfuse:2
@@ -410,7 +405,7 @@ services:
       redis:
         condition: service_healthy
       minio:
-        condition: service_healthy
+        condition: service_started
 
   celery_worker:
     image: ${BACKEND_IMAGE:-kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest}
@@ -453,7 +448,7 @@ services:
       redis:
         condition: service_healthy
       minio:
-        condition: service_healthy
+        condition: service_started
 
   react_frontend:
     image: ${FRONTEND_IMAGE:-kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest}
