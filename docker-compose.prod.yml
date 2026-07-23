@@ -12,7 +12,7 @@ services:
     ports:
       - "5434:5432"
     volumes:
-      - /mnt/storage/sip_postgres_data:/var/lib/postgresql/data
+      - /mnt/sip_storage/postgres_data:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-fbr_sip_db}" ]
@@ -30,7 +30,7 @@ services:
     ports:
       - "6380:6379"
     volumes:
-      - /mnt/storage/sip_redis_data:/data
+      - /mnt/sip_storage/redis_data:/data
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -51,7 +51,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadminpassword}
       TZ: Asia/Karachi
     volumes:
-      - /mnt/storage/sip_minio_data:/data
+      - /mnt/sip_storage/minio_data:/data
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 10s
@@ -113,7 +113,7 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     volumes:
-      - /mnt/storage/sip_shared_ingestion:/data/ingestion
+      - /mnt/sip_storage/shared_ingestion:/data/ingestion
     depends_on:
       postgres:
         condition: service_healthy
@@ -156,7 +156,7 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     volumes:
-      - /mnt/storage/sip_shared_ingestion:/data/ingestion
+      - /mnt/sip_storage/shared_ingestion:/data/ingestion
     depends_on:
       postgres:
         condition: service_healthy

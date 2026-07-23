@@ -1,6 +1,6 @@
 # Smart Invoice Processor (SIP) — Production Deployment Guide
 
-**Single Repository (`kamipakistan/varietyidentification`) Multi-Tag Workflow · Ubuntu 22.04 · CPU-Only Server · Gemini 3.5 Flash · LiteLLM & Langfuse Observability**
+**Single Repository (`kamipakistan/varietyidentification`) Multi-Tag Workflow · Isolated Storage (`/mnt/sip_storage`) · Ubuntu 22.04 · CPU-Only Server · Gemini 3.5 Flash · LiteLLM & Langfuse Observability**
 
 > [!IMPORTANT]
 > This guide covers the complete end-to-end production deployment workflow for the **Smart Invoice Processor (SIP)** system co-existing on the same production server as the **Moiz Steel Receipt Automation** system.
@@ -8,23 +8,28 @@
 > - **Receipt Automation Tags**: `api-latest`, `frontend-latest`
 > - **Smart Invoice Processor Tags**: `smartinvoiceprocessor-api-latest`, `smartinvoiceprocessor-frontend-latest`
 > 
-> To prevent network port conflicts with Receipt Automation (which occupies host ports `3000`, `8000`, `4000`, `5433`, `6379`, `9000`, and `9001`), the **Smart Invoice Processor** utilizes a distinct set of production host ports (`3001`, `8001`, `4001`, `5434`, `6380`, `9010`, and `9011`).
+> To prevent storage directory and network port conflicts with Receipt Automation (which occupies `/mnt/storage` and host ports `3000`, `8000`, `4000`, `5433`, `6379`, `9000`, `9001`), **Smart Invoice Processor** uses an isolated root storage directory (**`/mnt/sip_storage`**) and distinct host ports (`3001`, `8001`, `4001`, `5434`, `6380`, `9010`, `9011`).
 
 ---
 
-## 1. Multi-App Production Port Comparison Matrix
+## 1. Multi-App Production Port & Storage Comparison Matrix
 
-When both applications are deployed on the **same Ubuntu production server**, each service requires dedicated, non-overlapping host ports:
+When both applications are deployed on the **same Ubuntu production server**, each service requires dedicated, non-overlapping host ports and isolated storage root paths:
 
-| Service Component | Receipt Automation Host Port | Smart Invoice Processor (SIP) Host Port | Internal Container Port | Description |
+| Service Component | Receipt Automation | Smart Invoice Processor (SIP) | Internal Container Port | Description |
 |---|---|---|---|---|
-| **React Web Frontend** | `3000` | **`3001`** | `80` | Production React SPA served via Nginx |
-| **FastAPI Backend API** | `8000` | **`8001`** | `8000` | REST API (Ingestion, HITL Review, Export) |
-| **Langfuse Observability** | `4000` | **`4001`** | `3000` | LLM Tracing, Latency & Token Cost Dashboard |
-| **PostgreSQL Database** | `5433` | **`5434`** | `5432` | Relational DB (`fbr_sip_db`) |
-| **Redis Broker** | `6379` | **`6380`** | `6379` | Celery Async Task Broker |
-| **MinIO S3 API** | `9000` | **`9010`** | `9000` | Object Storage API for Invoice PDFs |
-| **MinIO Web Console** | `9001` | **`9011`** | `9001` | Object Storage Admin Console |
+| **Host Storage Path** | **`/mnt/storage/`** | **`/mnt/sip_storage/`** | — | Dedicated Host Persistent Storage Root |
+| **PostgreSQL DB Volume** | `/mnt/storage/postgres_data` | `/mnt/sip_storage/postgres_data` | `/var/lib/postgresql/data` | Database Data Mount |
+| **Redis Data Volume** | `/mnt/storage/redis_data` | `/mnt/sip_storage/redis_data` | `/data` | Redis AOF Data Mount |
+| **MinIO Data Volume** | `/mnt/storage/minio_data` | `/mnt/sip_storage/minio_data` | `/data` | Object Storage PDF Mount |
+| **Shared Ingestion Volume** | `/mnt/storage/shared_ingestion` | `/mnt/sip_storage/shared_ingestion` | `/data/ingestion` | Shared Batch Upload Directory |
+| **React Web Frontend Port** | `3000` | **`3001`** | `80` | Production React SPA served via Nginx |
+| **FastAPI Backend API Port** | `8000` | **`8001`** | `8000` | REST API (Ingestion, HITL Review, Export) |
+| **Langfuse Dashboard Port** | `4000` | **`4001`** | `3000` | LLM Tracing, Latency & Token Cost Dashboard |
+| **PostgreSQL Database Port** | `5433` | **`5434`** | `5432` | Relational DB (`fbr_sip_db`) |
+| **Redis Broker Port** | `6379` | **`6380`** | `6379` | Celery Async Task Broker |
+| **MinIO S3 API Port** | `9000` | **`9010`** | `9000` | Object Storage API for Invoice PDFs |
+| **MinIO Web Console Port** | `9001` | **`9011`** | `9001` | Object Storage Admin Console |
 
 ---
 
@@ -50,15 +55,6 @@ When both applications are deployed on the **same Ubuntu production server**, ea
 | `kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest` | `backend/Dockerfile` | FastAPI + Celery worker (Python 3.11-slim) |
 | `kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest` | `frontend/Dockerfile` | React SPA (Node 20 build → Nginx) |
 
-### Infrastructure Images (Pulled directly from Docker Hub)
-
-| Image | Purpose |
-|---|---|
-| `postgres:15-alpine` | Relational database for FBR invoice headers, line items, batches & Langfuse |
-| `redis:7-alpine` | Celery task broker with AOF persistence |
-| `minio/minio:RELEASE.2024-01-28T22-35-53Z` | S3-compatible raw (`raw-invoices`) & processed (`processed-invoices`) PDF store |
-| `langfuse/langfuse:2` | LLM observability, prompt execution tracing, and cost/token tracking dashboard |
-
 ---
 
 ## 3. System Architecture
@@ -82,10 +78,10 @@ graph TD
         LF["Langfuse Server<br>(Port 4001:3000)"]
     end
 
-    subgraph "Infrastructure & Storage"
-        PG["PostgreSQL 15<br>(Port 5434:5432)"]
-        RD["Redis 7<br>(Port 6380:6379)"]
-        MN["MinIO Object Store<br>(Port 9010 API / 9011 Console)"]
+    subgraph "Infrastructure & Storage (/mnt/sip_storage)"
+        PG["PostgreSQL 15<br>(Port 5434:5432 · /mnt/sip_storage/postgres_data)"]
+        RD["Redis 7<br>(Port 6380:6379 · /mnt/sip_storage/redis_data)"]
+        MN["MinIO Object Store<br>(Port 9010/9011 · /mnt/sip_storage/minio_data)"]
     end
 
     subgraph "Unified AI Layer (LiteLLM)"
@@ -129,28 +125,6 @@ graph TD
 
 ## 4. PART A — Dev Machine Workflow (Build & Push)
 
-These steps run on **your development PC** where the source code repository lives.
-
-### A.1 Prerequisites
-
-```bash
-docker --version     # 20.10+ required
-docker compose version
-git --version
-```
-
-### A.2 Log In to Docker Hub
-
-```bash
-docker login
-# Username: kamipakistan
-# Password: <your Docker Hub password or Personal Access Token>
-```
-
-### A.3 Build & Tag Docker Images
-
-Build and tag images under the single repository **`kamipakistan/varietyidentification`**:
-
 ```bash
 cd /home/kamipakistan/Documents/ALMOIZ/Accounts-department/Smart-Invoice-Processor
 
@@ -163,7 +137,7 @@ docker build \
   -t kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest \
   ./backend
 
-# ── 2. Build React Frontend Image (Node 20 build → Nginx) ──
+# ── 2. Build React Frontend Image ──
 docker build \
   --label "project=Smart-Invoice-Processor" \
   --label "component=frontend" \
@@ -171,16 +145,11 @@ docker build \
   -t kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-1.0.0 \
   -t kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest \
   ./frontend
-```
 
-### A.4 Push Images to Docker Hub
-
-```bash
-# Push Backend images to single private repository
+# ── 3. Push Images to Private Docker Hub Repository ──
 docker push kamipakistan/varietyidentification:smartinvoiceprocessor-api-1.0.0
 docker push kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest
 
-# Push Frontend images to single private repository
 docker push kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-1.0.0
 docker push kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest
 ```
@@ -191,13 +160,22 @@ docker push kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-la
 
 ### B.1 Storage Layout
 
-SIP maintains separate host storage directories from Receipt Automation:
+To guarantee complete separation from Receipt Automation's `/mnt/storage/` folder, SIP uses the dedicated root directory **`/mnt/sip_storage/`**:
 
 ```bash
-# Create dedicated SIP storage directories on the host
-sudo mkdir -p /mnt/storage/{sip_postgres_data,sip_redis_data,sip_minio_data,sip_shared_ingestion}
-sudo chown -R $USER:$USER /mnt/storage
+# Create dedicated SIP root storage directory on the host
+sudo mkdir -p /mnt/sip_storage/{postgres_data,redis_data,minio_data,shared_ingestion}
+sudo chown -R $USER:$USER /mnt/sip_storage
 ```
+
+#### Storage Directory Summary
+
+| Host Directory | Container Mount Path | Service |
+|---|---|---|
+| `/mnt/sip_storage/postgres_data` | `/var/lib/postgresql/data` | PostgreSQL 15 |
+| `/mnt/sip_storage/redis_data` | `/data` | Redis 7 |
+| `/mnt/sip_storage/minio_data` | `/data` | MinIO Object Store |
+| `/mnt/sip_storage/shared_ingestion` | `/data/ingestion` | FastAPI & Celery Worker |
 
 ### B.2 Clone Repository & Configure Environment
 
@@ -294,26 +272,6 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml ps
 ```
 
-**Expected Output:**
-
-```
-NAME                IMAGE                                                                 STATUS          PORTS
-sip_postgres        postgres:15-alpine                                                    Up (healthy)    0.0.0.0:5434->5432/tcp
-sip_redis           redis:7-alpine                                                       Up (healthy)    0.0.0.0:6380->6379/tcp
-sip_minio           minio/minio:RELEASE.2024-01-28T22-35-53Z                             Up (healthy)    0.0.0.0:9010-9011->9000-9001/tcp
-sip_langfuse        langfuse/langfuse:2                                                   Up              0.0.0.0:4001->3000/tcp
-sip_backend         kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest   Up              0.0.0.0:8001->8000/tcp
-sip_celery_worker   kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest   Up
-sip_frontend        kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest Up              0.0.0.0:3001->80/tcp
-```
-
-### C.3 Execute Setup & Initialization Diagnostics
-
-```bash
-cd /home/almoiz/smart-invoice-processor
-python3 setup_project.py
-```
-
 ---
 
 ## 7. PART D — Verification & Access Points
@@ -344,7 +302,7 @@ services:
     ports:
       - "5434:5432"
     volumes:
-      - /mnt/storage/sip_postgres_data:/var/lib/postgresql/data
+      - /mnt/sip_storage/postgres_data:/var/lib/postgresql/data
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-fbr_sip_db}" ]
@@ -362,7 +320,7 @@ services:
     ports:
       - "6380:6379"
     volumes:
-      - /mnt/storage/sip_redis_data:/data
+      - /mnt/sip_storage/redis_data:/data
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -383,7 +341,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadminpassword}
       TZ: Asia/Karachi
     volumes:
-      - /mnt/storage/sip_minio_data:/data
+      - /mnt/sip_storage/minio_data:/data
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 10s
@@ -445,7 +403,7 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     volumes:
-      - /mnt/storage/sip_shared_ingestion:/data/ingestion
+      - /mnt/sip_storage/shared_ingestion:/data/ingestion
     depends_on:
       postgres:
         condition: service_healthy
@@ -488,7 +446,7 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     volumes:
-      - /mnt/storage/sip_shared_ingestion:/data/ingestion
+      - /mnt/sip_storage/shared_ingestion:/data/ingestion
     depends_on:
       postgres:
         condition: service_healthy
