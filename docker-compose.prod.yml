@@ -1,0 +1,178 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: sip_postgres
+    restart: always
+    mem_limit: 1g
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fbr_sip_db}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
+      TZ: Asia/Karachi
+    ports:
+      - "5434:5432"
+    volumes:
+      - /mnt/storage/sip_postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-fbr_sip_db}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: sip_redis
+    restart: always
+    mem_limit: 512m
+    environment:
+      TZ: Asia/Karachi
+    ports:
+      - "6380:6379"
+    volumes:
+      - /mnt/storage/sip_redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2024-01-28T22-35-53Z
+    container_name: sip_minio
+    restart: always
+    mem_limit: 1g
+    command: server /data --console-address ":9001"
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadminpassword}
+      TZ: Asia/Karachi
+    volumes:
+      - /mnt/storage/sip_minio_data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: sip_langfuse
+    restart: always
+    mem_limit: 1g
+    ports:
+      - "4000:3000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/${POSTGRES_DB:-fbr_sip_db}
+      - NEXTAUTH_SECRET=sip-smart-invoice-secret-2026
+      - SALT=sip-smart-invoice-salt-2026
+      - ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
+      - NEXTAUTH_URL=http://localhost:4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  fastapi_app:
+    image: ${BACKEND_IMAGE:-kamipakistan/smartinvoiceprocessor:api-latest}
+    container_name: sip_backend
+    restart: always
+    mem_limit: 2g
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Karachi
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/${POSTGRES_DB:-fbr_sip_db}
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_EXTERNAL_ENDPOINT=${MINIO_EXTERNAL_ENDPOINT:-http://localhost:9010}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadminpassword}
+      - MINIO_BUCKET_RAW=${MINIO_BUCKET_RAW:-raw-invoices}
+      - MINIO_BUCKET_PROCESSED=${MINIO_BUCKET_PROCESSED:-processed-invoices}
+      - AI_PROVIDER=${AI_PROVIDER:-gemini}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3-vl:8b}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://localhost:11434}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-25}
+      - MAX_BATCH_FILES=${MAX_BATCH_FILES:-200}
+      - BATCH_INGESTION_ROOT=${BATCH_INGESTION_ROOT:-/data/ingestion}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_PUBLIC_HOST=${LANGFUSE_PUBLIC_HOST:-http://localhost:4000}
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - /mnt/storage/sip_shared_ingestion:/data/ingestion
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  celery_worker:
+    image: ${BACKEND_IMAGE:-kamipakistan/smartinvoiceprocessor:api-latest}
+    container_name: sip_celery_worker
+    restart: always
+    mem_limit: 2g
+    command: celery -A app.tasks.celery_worker worker --loglevel=info --concurrency=${CELERY_CONCURRENCY:-4}
+    environment:
+      - TZ=Asia/Karachi
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-secretpassword}@postgres:5432/${POSTGRES_DB:-fbr_sip_db}
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_EXTERNAL_ENDPOINT=${MINIO_EXTERNAL_ENDPOINT:-http://localhost:9010}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadminpassword}
+      - MINIO_BUCKET_RAW=${MINIO_BUCKET_RAW:-raw-invoices}
+      - MINIO_BUCKET_PROCESSED=${MINIO_BUCKET_PROCESSED:-processed-invoices}
+      - AI_PROVIDER=${AI_PROVIDER:-gemini}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3-vl:8b}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://localhost:11434}
+      - BATCH_INGESTION_ROOT=${BATCH_INGESTION_ROOT:-/data/ingestion}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_PUBLIC_HOST=${LANGFUSE_PUBLIC_HOST:-http://localhost:4000}
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - /mnt/storage/sip_shared_ingestion:/data/ingestion
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  react_frontend:
+    image: ${FRONTEND_IMAGE:-kamipakistan/smartinvoiceprocessor:frontend-latest}
+    container_name: sip_frontend
+    restart: always
+    mem_limit: 256m
+    ports:
+      - "3000:80"
+    environment:
+      - TZ=Asia/Karachi
+    depends_on:
+      - fastapi_app
