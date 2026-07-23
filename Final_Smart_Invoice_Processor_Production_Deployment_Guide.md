@@ -1,9 +1,13 @@
 # Smart Invoice Processor (SIP) — Production Deployment Guide
 
-**Multi-App Co-existence · Docker Hub Push/Pull Workflow · Ubuntu 22.04 · CPU-Only Server · Gemini 3.5 Flash · LiteLLM & Langfuse Observability**
+**Single Repository (`kamipakistan/varietyidentification`) Multi-Tag Workflow · Ubuntu 22.04 · CPU-Only Server · Gemini 3.5 Flash · LiteLLM & Langfuse Observability**
 
 > [!IMPORTANT]
 > This guide covers the complete end-to-end production deployment workflow for the **Smart Invoice Processor (SIP)** system co-existing on the same production server as the **Moiz Steel Receipt Automation** system.
+> Both systems share the single private Docker Hub repository **`kamipakistan/varietyidentification`** using distinct image tag prefixes:
+> - **Receipt Automation Tags**: `api-latest`, `frontend-latest`
+> - **Smart Invoice Processor Tags**: `smartinvoiceprocessor-api-latest`, `smartinvoiceprocessor-frontend-latest`
+> 
 > To prevent network port conflicts with Receipt Automation (which occupies host ports `3000`, `8000`, `4000`, `5433`, `6379`, `9000`, and `9001`), the **Smart Invoice Processor** utilizes a distinct set of production host ports (`3001`, `8001`, `4001`, `5434`, `6380`, `9010`, and `9011`).
 
 ---
@@ -27,24 +31,24 @@ When both applications are deployed on the **same Ubuntu production server**, ea
 ## 2. Deployment Model
 
 ```
-┌────────────────────────────────┐        Docker Hub         ┌────────────────────────────────┐
-│   DEV MACHINE                  │   ─── docker push ───►    │   PRODUCTION SERVER            │
-│   (Ubuntu 22.04 / Dev PC)      │                           │   (Ubuntu 22.04 / CPU Server)   │
-│                                │   kamipakistan/            │                                │
-│  1. Make code changes          │   smartinvoiceprocessor:  │  1. docker login               │
-│  2. docker build (backend)     │     api-1.0.0              │  2. docker compose pull        │
-│  3. docker build (frontend)    │     api-latest             │  3. docker compose up -d       │
-│  4. docker push (both images)  │     frontend-1.0.0         │  4. python setup_project.py    │
-│                                │     frontend-latest        │                                │
-└────────────────────────────────┘                           └────────────────────────────────┘
+┌────────────────────────────────┐        Docker Hub Repository       ┌────────────────────────────────┐
+│   DEV MACHINE                  │   kamipakistan/varietyidentification│   PRODUCTION SERVER            │
+│   (Ubuntu 22.04 / Dev PC)      │   ─── docker push ───────────────► │   (Ubuntu 22.04 / CPU Server)   │
+│                                │                                    │                                │
+│  1. Make code changes          │   Tags:                            │  1. docker login               │
+│  2. docker build (backend)     │     smartinvoiceprocessor-api-1.0.0 │  2. docker compose pull        │
+│  3. docker build (frontend)    │     smartinvoiceprocessor-api-latest│  3. docker compose up -d       │
+│  4. docker push (both images)  │     smartinvoiceprocessor-fe-1.0.0 │  4. python setup_project.py    │
+│                                │     smartinvoiceprocessor-fe-latest│                                │
+└────────────────────────────────┘                                    └────────────────────────────────┘
 ```
 
 ### Image Inventory
 
 | Image Tag | Source | Contents |
 |---|---|---|
-| `kamipakistan/smartinvoiceprocessor:api-latest` | `backend/Dockerfile` | FastAPI + Celery worker (Python 3.11-slim) |
-| `kamipakistan/smartinvoiceprocessor:frontend-latest` | `frontend/Dockerfile` | React SPA (Node 20 build → Nginx) |
+| `kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest` | `backend/Dockerfile` | FastAPI + Celery worker (Python 3.11-slim) |
+| `kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest` | `frontend/Dockerfile` | React SPA (Node 20 build → Nginx) |
 
 ### Infrastructure Images (Pulled directly from Docker Hub)
 
@@ -117,29 +121,9 @@ graph TD
 | `sip_redis` | `redis:7-alpine` | `6380 → 6379` | 512 MB | Celery task broker with AOF persistence |
 | `sip_minio` | `minio/minio:RELEASE.2024-*` | `9010 / 9011` | 1 GB | S3-compatible raw & processed PDF object store |
 | `sip_langfuse` | `langfuse/langfuse:2` | `4001 → 3000` | 1 GB | Web dashboard for LLM tracing, latency & token cost tracking |
-| `sip_backend` | `kamipakistan/smartinvoiceprocessor:api-latest` | `8001 → 8000` | 2 GB | FastAPI REST API (ingestion, review, export, health) |
-| `sip_celery_worker` | `kamipakistan/smartinvoiceprocessor:api-latest` | — | 2 GB | Background PDF rendering & Vision LLM extraction worker |
-| `sip_frontend` | `kamipakistan/smartinvoiceprocessor:frontend-latest` | `3001 → 80` | 256 MB | Production React SPA (multi-stage Dockerfile served by Nginx) |
-
-> **No GPU Required**: Smart Invoice Processor routes vision requests to Google Gemini 3.5 Flash over HTTPS. No local GPU or Ollama instance is needed on the production server.
-
-### Dynamic Frontend → Backend API Resolution
-
-The React app dynamically resolves the backend API endpoint at runtime:
-
-```typescript
-const getApiBase = () => {
-  const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
-  if (envUrl && envUrl !== 'http://localhost:8001') return envUrl;
-  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-    return `http://${window.location.hostname}:8001`;
-  }
-  return 'http://localhost:8001';
-};
-const API_BASE = getApiBase();
-```
-
-If the client accesses the frontend at `http://192.168.10.50:3001`, API requests automatically direct to `http://192.168.10.50:8001`. **No hardcoded URLs need to be edited for deployment.**
+| `sip_backend` | `kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest` | `8001 → 8000` | 2 GB | FastAPI REST API (ingestion, review, export, health) |
+| `sip_celery_worker` | `kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest` | — | 2 GB | Background PDF rendering & Vision LLM extraction worker |
+| `sip_frontend` | `kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest` | `3001 → 80` | 256 MB | Production React SPA (multi-stage Dockerfile served by Nginx) |
 
 ---
 
@@ -163,40 +147,42 @@ docker login
 # Password: <your Docker Hub password or Personal Access Token>
 ```
 
-### A.3 Build Docker Images
+### A.3 Build & Tag Docker Images
+
+Build and tag images under the single repository **`kamipakistan/varietyidentification`**:
 
 ```bash
 cd /home/kamipakistan/Documents/ALMOIZ/Accounts-department/Smart-Invoice-Processor
 
-# ── Build Backend API & Celery Image ──
+# ── 1. Build Backend API & Celery Image ──
 docker build \
   --label "project=Smart-Invoice-Processor" \
   --label "component=api" \
   --label "version=1.0.0" \
-  -t kamipakistan/smartinvoiceprocessor:api-1.0.0 \
-  -t kamipakistan/smartinvoiceprocessor:api-latest \
+  -t kamipakistan/varietyidentification:smartinvoiceprocessor-api-1.0.0 \
+  -t kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest \
   ./backend
 
-# ── Build React Frontend Image (Node 20 build → Nginx) ──
+# ── 2. Build React Frontend Image (Node 20 build → Nginx) ──
 docker build \
   --label "project=Smart-Invoice-Processor" \
   --label "component=frontend" \
   --label "version=1.0.0" \
-  -t kamipakistan/smartinvoiceprocessor:frontend-1.0.0 \
-  -t kamipakistan/smartinvoiceprocessor:frontend-latest \
+  -t kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-1.0.0 \
+  -t kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest \
   ./frontend
 ```
 
 ### A.4 Push Images to Docker Hub
 
 ```bash
-# Push Backend images
-docker push kamipakistan/smartinvoiceprocessor:api-1.0.0
-docker push kamipakistan/smartinvoiceprocessor:api-latest
+# Push Backend images to single private repository
+docker push kamipakistan/varietyidentification:smartinvoiceprocessor-api-1.0.0
+docker push kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest
 
-# Push Frontend images
-docker push kamipakistan/smartinvoiceprocessor:frontend-1.0.0
-docker push kamipakistan/smartinvoiceprocessor:frontend-latest
+# Push Frontend images to single private repository
+docker push kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-1.0.0
+docker push kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest
 ```
 
 ---
@@ -212,15 +198,6 @@ SIP maintains separate host storage directories from Receipt Automation:
 sudo mkdir -p /mnt/storage/{sip_postgres_data,sip_redis_data,sip_minio_data,sip_shared_ingestion}
 sudo chown -R $USER:$USER /mnt/storage
 ```
-
-#### Storage Directory Summary
-
-| Host Directory | Container Mount Path | Service |
-|---|---|---|
-| `/mnt/storage/sip_postgres_data` | `/var/lib/postgresql/data` | PostgreSQL 15 |
-| `/mnt/storage/sip_redis_data` | `/data` | Redis 7 |
-| `/mnt/storage/sip_minio_data` | `/data` | MinIO Object Store |
-| `/mnt/storage/sip_shared_ingestion` | `/data/ingestion` | FastAPI & Celery Worker |
 
 ### B.2 Clone Repository & Configure Environment
 
@@ -285,10 +262,10 @@ MAX_BATCH_FILES=200
 BATCH_INGESTION_ROOT=/data/ingestion
 
 # ======================================================================
-# DOCKER HUB IMAGE REPOSITORY
+# SINGLE PRIVATE REPOSITORY (kamipakistan/varietyidentification)
 # ======================================================================
-BACKEND_IMAGE=kamipakistan/smartinvoiceprocessor:api-latest
-FRONTEND_IMAGE=kamipakistan/smartinvoiceprocessor:frontend-latest
+BACKEND_IMAGE=kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest
+FRONTEND_IMAGE=kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest
 
 # ======================================================================
 # LANGFUSE OBSERVABILITY & TELEMETRY (Host Port 4001)
@@ -320,14 +297,14 @@ docker compose -f docker-compose.prod.yml ps
 **Expected Output:**
 
 ```
-NAME                IMAGE                                                    STATUS          PORTS
-sip_postgres        postgres:15-alpine                                       Up (healthy)    0.0.0.0:5434->5432/tcp
-sip_redis           redis:7-alpine                                          Up (healthy)    0.0.0.0:6380->6379/tcp
-sip_minio           minio/minio:RELEASE.2024-01-28T22-35-53Z                Up (healthy)    0.0.0.0:9010-9011->9000-9001/tcp
-sip_langfuse        langfuse/langfuse:2                                      Up              0.0.0.0:4001->3000/tcp
-sip_backend         kamipakistan/smartinvoiceprocessor:api-latest            Up              0.0.0.0:8001->8000/tcp
-sip_celery_worker   kamipakistan/smartinvoiceprocessor:api-latest            Up
-sip_frontend        kamipakistan/smartinvoiceprocessor:frontend-latest       Up              0.0.0.0:3001->80/tcp
+NAME                IMAGE                                                                 STATUS          PORTS
+sip_postgres        postgres:15-alpine                                                    Up (healthy)    0.0.0.0:5434->5432/tcp
+sip_redis           redis:7-alpine                                                       Up (healthy)    0.0.0.0:6380->6379/tcp
+sip_minio           minio/minio:RELEASE.2024-01-28T22-35-53Z                             Up (healthy)    0.0.0.0:9010-9011->9000-9001/tcp
+sip_langfuse        langfuse/langfuse:2                                                   Up              0.0.0.0:4001->3000/tcp
+sip_backend         kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest   Up              0.0.0.0:8001->8000/tcp
+sip_celery_worker   kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest   Up
+sip_frontend        kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest Up              0.0.0.0:3001->80/tcp
 ```
 
 ### C.3 Execute Setup & Initialization Diagnostics
@@ -341,52 +318,16 @@ python3 setup_project.py
 
 ## 7. PART D — Verification & Access Points
 
-### D.1 SIP Access URLs
-
 | Service | Access URL | Purpose |
 |---|---|---|
 | **SIP Web Dashboard** | `http://<SERVER_IP>:3001` | Ingestion, HITL Review Queue & Excel Export |
 | **SIP FastAPI OpenAPI Docs** | `http://<SERVER_IP>:8001/docs` | REST API Specification |
-| **SIP Langfuse Dashboard** | `http://<SERVER_IP>:4001` | LLM Tracing & Token Metrics |
+| **SIP Langfuse Dashboard** | `http://<SERVER_IP>:4001` | LLM Traces & Token Metrics |
 | **SIP MinIO Console** | `http://<SERVER_IP>:9011` | Object Store Admin Console |
 
-### D.2 Test Ingestion via `curl`
-
-```bash
-curl -X POST 'http://<SERVER_IP>:8001/api/v1/invoices/upload-single' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: multipart/form-data' \
-  -F 'file=@/path/to/sample_invoice.pdf;type=application/pdf'
-```
-
 ---
 
-## 8. PART E — Firewall Configuration (`ufw`)
-
-Allow both Receipt Automation and Smart Invoice Processor ports:
-
-```bash
-# ── Receipt Automation Ports ──
-sudo ufw allow 3000/tcp   # Receipt Automation Frontend
-sudo ufw allow 8000/tcp   # Receipt Automation Backend API
-sudo ufw allow 4000/tcp   # Receipt Automation Langfuse
-sudo ufw allow 9000/tcp   # Receipt Automation MinIO API
-
-# ── Smart Invoice Processor (SIP) Ports ──
-sudo ufw allow 3001/tcp   # SIP React Frontend
-sudo ufw allow 8001/tcp   # SIP FastAPI Backend API
-sudo ufw allow 4001/tcp   # SIP Langfuse Dashboard
-sudo ufw allow 9010/tcp   # SIP MinIO S3 API
-sudo ufw allow 9011/tcp   # SIP MinIO Web Console
-sudo ufw allow 5434/tcp   # SIP PostgreSQL (Optional DB Tools)
-
-sudo ufw enable
-sudo ufw status
-```
-
----
-
-## 9. Appendix: Complete `docker-compose.prod.yml`
+## 8. Appendix: Complete `docker-compose.prod.yml`
 
 ```yaml
 services:
@@ -467,7 +408,7 @@ services:
         condition: service_healthy
 
   fastapi_app:
-    image: ${BACKEND_IMAGE:-kamipakistan/smartinvoiceprocessor:api-latest}
+    image: ${BACKEND_IMAGE:-kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest}
     container_name: sip_backend
     restart: always
     mem_limit: 2g
@@ -514,7 +455,7 @@ services:
         condition: service_healthy
 
   celery_worker:
-    image: ${BACKEND_IMAGE:-kamipakistan/smartinvoiceprocessor:api-latest}
+    image: ${BACKEND_IMAGE:-kamipakistan/varietyidentification:smartinvoiceprocessor-api-latest}
     container_name: sip_celery_worker
     restart: always
     mem_limit: 2g
@@ -557,7 +498,7 @@ services:
         condition: service_healthy
 
   react_frontend:
-    image: ${FRONTEND_IMAGE:-kamipakistan/smartinvoiceprocessor:frontend-latest}
+    image: ${FRONTEND_IMAGE:-kamipakistan/varietyidentification:smartinvoiceprocessor-frontend-latest}
     container_name: sip_frontend
     restart: always
     mem_limit: 256m
