@@ -20,6 +20,8 @@ import {
   X
 } from 'lucide-react';
 import type { SystemLog, LogStats, PaginatedLogResponse } from '../types';
+import { apiFetch } from '../api/client';
+
 
 interface LogsViewProps {
   apiBase: string;
@@ -45,7 +47,7 @@ export default function LogsView({ apiBase }: LogsViewProps) {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch(`${apiBase}/api/v1/logs/stats`);
+      const res = await apiFetch(`${apiBase}/api/v1/logs/stats`);
       if (res.ok) {
         const data: LogStats = await res.json();
         setStats(data);
@@ -66,7 +68,7 @@ export default function LogsView({ apiBase }: LogsViewProps) {
       params.append('page', currentPage.toString());
       params.append('limit', '30');
 
-      const res = await fetch(`${apiBase}/api/v1/logs?${params.toString()}`);
+      const res = await apiFetch(`${apiBase}/api/v1/logs?${params.toString()}`);
       if (res.ok) {
         const data: PaginatedLogResponse = await res.json();
         setLogs(data.items);
@@ -97,7 +99,7 @@ export default function LogsView({ apiBase }: LogsViewProps) {
   const handleClearLogs = async () => {
     if (!window.confirm('Are you sure you want to clear all system logs?')) return;
     try {
-      const res = await fetch(`${apiBase}/api/v1/logs/clear`, { method: 'DELETE' });
+      const res = await apiFetch(`${apiBase}/api/v1/logs/clear`, { method: 'DELETE' });
       if (res.ok) {
         fetchStats();
         fetchLogs();
@@ -313,6 +315,8 @@ export default function LogsView({ apiBase }: LogsViewProps) {
               <option value="gemini">Gemini</option>
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic</option>
+              <option value="groq">Groq</option>
+              <option value="openrouter">OpenRouter</option>
               <option value="ollama">Ollama</option>
             </select>
 

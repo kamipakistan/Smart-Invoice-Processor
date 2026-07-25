@@ -12,29 +12,21 @@ import {
   Cpu,
   Layers,
   CheckCircle2,
-  Terminal
+  Terminal,
+  LogOut,
+  User as UserIcon
 } from 'lucide-react';
 import UploadView from './views/UploadView';
 import ReviewView from './views/ReviewView';
 import ReportsView from './views/ReportsView';
 import LogsView from './views/LogsView';
 import type { InvoiceHeader } from './types';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import { apiFetch, setApiBaseUrl, getDefaultApiBase } from './api/client';
 
-const getDefaultApiBase = () => {
-  const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
-  if (envUrl) return envUrl;
-  if (typeof window !== 'undefined' && window.location) {
-    const hostname = window.location.hostname || 'localhost';
-    const port = window.location.port;
-    if (port === '3001' || port === '8001') {
-      return `${window.location.protocol}//${hostname}:8001`;
-    }
-    return `${window.location.protocol}//${hostname}:8000`;
-  }
-  return 'http://localhost:8000';
-};
-
-export default function App() {
+function MainApp() {
+  const { user, logout, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<'upload' | 'review' | 'reports' | 'logs'>('upload');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState<boolean>(false);
@@ -49,25 +41,13 @@ export default function App() {
   const [pendingReviewCount, setPendingReviewCount] = useState<number>(0);
   const [backendOnline, setBackendOnline] = useState<boolean>(true);
 
+  useEffect(() => {
+    setApiBaseUrl(apiBase);
+  }, [apiBase]);
+
   // Poll pending exceptions count & probe port candidates if primary fails
   const fetchExceptionsCount = async () => {
-    const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
-    if (envUrl) {
-      try {
-        const res = await fetch(`${envUrl}/api/v1/invoices/exceptions`);
-        if (res.ok) {
-          const data: InvoiceHeader[] = await res.json();
-          setPendingReviewCount(data.length);
-          setBackendOnline(true);
-          setApiBase(envUrl);
-          return;
-        }
-      } catch (err) {
-        setBackendOnline(false);
-      }
-      return;
-    }
-
+    if (!isAuthenticated) return;
     const hostname = typeof window !== 'undefined' ? window.location.hostname || 'localhost' : 'localhost';
     const protocol = typeof window !== 'undefined' ? window.location.protocol || 'http:' : 'http:';
     const candidates = [
@@ -82,18 +62,26 @@ export default function App() {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2000);
-        const res = await fetch(`${candidate}/api/v1/invoices/exceptions`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-          const data: InvoiceHeader[] = await res.json();
-          setPendingReviewCount(data.length);
+        
+        // Check health endpoint first
+        const healthRes = await fetch(`${candidate}/health`, { signal: controller.signal });
+        if (healthRes.ok) {
           setBackendOnline(true);
           setApiBase(candidate);
+          setApiBaseUrl(candidate);
           const match = candidate.match(/:(\d+)/);
           if (match) setActivePort(parseInt(match[1], 10));
+
+          // Now fetch exceptions with authenticated apiFetch
+          const excRes = await apiFetch(`${candidate}/api/v1/invoices/exceptions`, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (excRes.ok) {
+            const data: InvoiceHeader[] = await excRes.json();
+            setPendingReviewCount(data.length);
+          }
           return;
         }
+        clearTimeout(timeoutId);
       } catch (err) {
         // try next candidate port
       }
@@ -105,7 +93,7 @@ export default function App() {
     fetchExceptionsCount();
     const interval = setInterval(fetchExceptionsCount, 6000);
     return () => clearInterval(interval);
-  }, [apiBase]);
+  }, [apiBase, isAuthenticated]);
 
   const navItems = [
     {
@@ -145,12 +133,23 @@ export default function App() {
           </div>
           <span className="font-bold text-white tracking-tight">SIP Invoice Processor</span>
         </div>
-        <button
-          onClick={() => setMobileDrawerOpen(!mobileDrawerOpen)}
-          className="p-2 text-slate-400 hover:text-white"
-        >
-          {mobileDrawerOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
+        <div className="flex items-center gap-2">
+          {user && (
+            <button
+              onClick={logout}
+              className="p-1.5 text-slate-400 hover:text-red-400 rounded-lg transition-colors"
+              title="Sign Out"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          )}
+          <button
+            onClick={() => setMobileDrawerOpen(!mobileDrawerOpen)}
+            className="p-2 text-slate-400 hover:text-white"
+          >
+            {mobileDrawerOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
       </div>
 
       {/* Left Sidebar Navigation Component */}
@@ -274,10 +273,29 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="text-xs text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
+            <span className="text-xs text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg hidden xl:flex items-center gap-2">
               <Cpu className="w-4 h-4 text-cyan-400" />
               Vision AI Multi-Model Ingestion Engine
             </span>
+
+            {user && (
+              <div className="flex items-center gap-3 pl-2 border-l border-slate-800">
+                <div className="flex items-center gap-2 text-xs text-slate-200 font-medium">
+                  <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold uppercase shadow-sm">
+                    {user.username.charAt(0)}
+                  </div>
+                  <span className="hidden sm:inline">{user.username}</span>
+                </div>
+                <button
+                  onClick={logout}
+                  className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden md:inline">Logout</span>
+                </button>
+              </div>
+            )}
           </div>
         </header>
 
@@ -290,5 +308,15 @@ export default function App() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <ProtectedRoute>
+        <MainApp />
+      </ProtectedRoute>
+    </AuthProvider>
   );
 }

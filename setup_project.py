@@ -28,7 +28,7 @@ def run_phase2_diagnostics():
     from app.config import settings
     from app.services.minio_service import minio_service
     from app.database import sync_engine, Base
-    import app.models.invoice
+    import app.models
     import redis
 
     print("==================================================")
@@ -76,6 +76,18 @@ def run_phase2_diagnostics():
         log(f"OpenAI Model: {settings.OPENAI_MODEL}")
         if settings.OPENAI_API_KEY:
             log("OpenAI API Key configured.", "+")
+    elif settings.AI_PROVIDER.lower() == "groq":
+        log(f"Groq Model: {settings.GROQ_MODEL}")
+        if settings.GROQ_API_KEY:
+            log("Groq API Key configured.", "+")
+        else:
+            log("WARNING: GROQ_API_KEY is not set in environment.", "!")
+    elif settings.AI_PROVIDER.lower() == "openrouter":
+        log(f"OpenRouter Model: {settings.OPENROUTER_MODEL}")
+        if settings.OPENROUTER_API_KEY:
+            log("OpenRouter API Key configured.", "+")
+        else:
+            log("WARNING: OPENROUTER_API_KEY is not set in environment.", "!")
     print("==================================================")
 
 if __name__ == "__main__":

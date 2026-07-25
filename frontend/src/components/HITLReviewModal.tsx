@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, CheckCircle, AlertTriangle, Plus, Trash2, XCircle } from 'lucide-react';
 import type { InvoiceHeader, LineItem } from '../types';
 import PDFViewer from './PDFViewer';
+import { apiFetch } from '../api/client';
 
 interface HITLReviewModalProps {
   invoice: InvoiceHeader | null;
@@ -96,7 +97,7 @@ export default function HITLReviewModal({
     };
 
     try {
-      const res = await fetch(`${apiBase}/api/v1/invoices/${invoice.id}/review`, {
+      const res = await apiFetch(`${apiBase}/api/v1/invoices/${invoice.id}/review`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -129,7 +130,7 @@ export default function HITLReviewModal({
     setErrorMsg(null);
 
     try {
-      const res = await fetch(`${apiBase}/api/v1/invoices/${invoice.id}/reject`, {
+      const res = await apiFetch(`${apiBase}/api/v1/invoices/${invoice.id}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rejection_reason: rejectionReason }),

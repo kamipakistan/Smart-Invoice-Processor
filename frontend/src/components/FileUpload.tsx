@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { UploadCloud, FileText, X, AlertCircle } from 'lucide-react';
+import { apiFetch } from '../api/client';
 
 interface FileUploadProps {
   onUploadSuccess: (batchId: string) => void;
@@ -58,7 +59,7 @@ export default function FileUpload({ onUploadSuccess, apiBase }: FileUploadProps
     });
 
     try {
-      const res = await fetch(`${apiBase}/api/v1/invoices/upload`, {
+      const res = await apiFetch(`${apiBase}/api/v1/invoices/upload`, {
         method: 'POST',
         body: formData,
       });

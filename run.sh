@@ -74,11 +74,11 @@ pkill -9 -f "celery worker" &>/dev/null || true
 pkill -9 -f "vite" &>/dev/null || true
 
 python3 -c "
-import os, subprocess, re, socket
+import os, subprocess, re
 
 for port in [8000, 5173]:
     try:
-        out = subprocess.check_output('ss -tulpn 2>/dev/null || lsof -i :' + str(port) + ' 2>/dev/null || true', shell=True, text=True)
+        out = subprocess.check_output(f'lsof -i :{port} 2>/dev/null || ss -tulpn sport = :{port} 2>/dev/null || true', shell=True, text=True)
         pids = set(re.findall(r'pid=(\d+)', out) + re.findall(r'\b(\d+)/(?:python|uvicorn|node|vite|docker)', out))
         for pid in pids:
             try:

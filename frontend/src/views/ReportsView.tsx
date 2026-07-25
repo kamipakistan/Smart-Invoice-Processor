@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import type { InvoiceHeader } from '../types';
 import InvoiceTable from '../components/InvoiceTable';
+import { apiFetch, apiFetchBlob } from '../api/client';
+
 
 interface ReportsViewProps {
   apiBase: string;
@@ -35,7 +37,7 @@ export default function ReportsView({ apiBase }: ReportsViewProps) {
       if (dateField) queryParams.push(`date_field=${dateField}`);
 
       const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-      const res = await fetch(`${apiBase}/api/v1/invoices${queryString}`);
+      const res = await apiFetch(`${apiBase}/api/v1/invoices${queryString}`);
 
       if (res.ok) {
         const data: InvoiceHeader[] = await res.json();
@@ -85,9 +87,30 @@ export default function ReportsView({ apiBase }: ReportsViewProps) {
     inv => inv.status === 'COMPLETED' || inv.status === 'MANUALLY_VERIFIED' || inv.status === 'NEEDS_REVIEW'
   );
 
-  const exportUrl = `${apiBase}/api/v1/invoices/export?${
-    startDate ? `start_date=${startDate}&` : ''
-  }${endDate ? `end_date=${endDate}&` : ''}date_field=${dateField}`;
+  const [exporting, setExporting] = useState<boolean>(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const endpoint = `/api/v1/invoices/export?${
+        startDate ? `start_date=${startDate}&` : ''
+      }${endDate ? `end_date=${endDate}&` : ''}date_field=${dateField}`;
+      
+      const blob = await apiFetchBlob(endpoint);
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = `invoices_export_${new Date().toISOString().slice(0,10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objUrl);
+    } catch (err) {
+      console.error('Failed to export Excel report:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -103,16 +126,16 @@ export default function ReportsView({ apiBase }: ReportsViewProps) {
           </p>
         </div>
 
-        <a
-          href={exportUrl}
-          download
+        <button
+          onClick={handleExport}
+          disabled={validInvoices.length === 0 || exporting}
           className={`flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-5 py-2.5 rounded-xl shadow-lg hover:shadow-emerald-500/20 transition-all text-sm ${
-            validInvoices.length === 0 ? 'opacity-50 pointer-events-none' : ''
+            validInvoices.length === 0 || exporting ? 'opacity-50 pointer-events-none' : ''
           }`}
         >
           <Download className="w-4 h-4" />
-          <span>Export Excel Report ({validInvoices.length} Invoices)</span>
-        </a>
+          <span>{exporting ? 'Exporting...' : `Export Excel Report (${validInvoices.length} Invoices)`}</span>
+        </button>
       </div>
 
       {/* Date Control Panel with Dropdown Filter */}

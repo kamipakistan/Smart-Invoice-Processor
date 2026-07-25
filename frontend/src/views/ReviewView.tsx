@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle, ArrowRight, ShieldCheck, AlertOctagon } fro
 import type { InvoiceHeader } from '../types';
 import PDFViewer from '../components/PDFViewer';
 import HITLReviewModal from '../components/HITLReviewModal';
+import { apiFetch } from '../api/client';
 
 interface ReviewViewProps {
   apiBase: string;
@@ -16,7 +17,7 @@ export default function ReviewView({ apiBase, onReviewResolved }: ReviewViewProp
 
   const fetchExceptions = async () => {
     try {
-      const res = await fetch(`${apiBase}/api/v1/invoices/exceptions`);
+      const res = await apiFetch(`${apiBase}/api/v1/invoices/exceptions`);
       if (res.ok) {
         const data: InvoiceHeader[] = await res.json();
         setExceptions(data);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RefreshCw, CheckCircle, AlertTriangle, XCircle, Clock } from 'lucide-react';
 import type { BatchStatus } from '../types';
+import { apiFetch } from '../api/client';
 
 interface BatchTrackerProps {
   batchId: string;
@@ -13,7 +14,7 @@ export default function BatchTracker({ batchId, apiBase, onBatchComplete }: Batc
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch(`${apiBase}/api/v1/invoices/batch/${batchId}/status`);
+      const res = await apiFetch(`${apiBase}/api/v1/invoices/batch/${batchId}/status`);
       if (res.ok) {
         const data: BatchStatus = await res.json();
         setStatus(data);

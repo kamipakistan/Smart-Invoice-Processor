@@ -2,6 +2,7 @@ import os
 import time
 import base64
 import json
+import re
 import traceback
 from typing import List
 import litellm
@@ -54,6 +55,45 @@ RULES:
   no commentary.
 """
 
+def extract_json_from_text(raw_text: str) -> dict:
+    """
+    Robustly extracts and parses JSON dictionary from LLM completion responses.
+    Handles thinking tags (<think>...</think>), markdown code fences (```json ... ```),
+    and leading/trailing whitespace or text.
+    """
+    if not raw_text:
+        return {}
+    
+    # 1. Try direct json.loads first
+    try:
+        return json.loads(raw_text)
+    except Exception:
+        pass
+
+    try:
+        # 2. Strip reasoning / thinking tags (e.g. <think>...</think> from Qwen / DeepSeek R1 models)
+        cleaned = re.sub(r"<think>.*?</think>", "", raw_text, flags=re.DOTALL).strip()
+
+        # 3. Extract JSON string enclosed in markdown code fences if present
+        match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, re.DOTALL)
+        if match:
+            cleaned = match.group(1)
+        else:
+            # Strip lines starting with ```
+            lines = [line for line in cleaned.splitlines() if not line.strip().startswith("```")]
+            cleaned = "\n".join(lines).strip()
+
+        # 4. Find the first '{' and last '}'
+        start_idx = cleaned.find("{")
+        end_idx = cleaned.rfind("}")
+        if start_idx != -1 and end_idx != -1 and end_idx >= start_idx:
+            cleaned = cleaned[start_idx:end_idx + 1]
+
+        return json.loads(cleaned)
+    except Exception as parse_err:
+        print(f"Failed to parse JSON from model output ({parse_err}). Output snippet: {raw_text[:200]}")
+        return {}
+
 class LiteLLMAIProvider(BaseAIProvider):
     def extract_invoice_data(self, image_bytes_list: List[bytes]) -> InvoiceExtractionSchema:
         messages = [
@@ -86,6 +126,18 @@ class LiteLLMAIProvider(BaseAIProvider):
             raw_model = settings.ANTHROPIC_MODEL
             model_name = raw_model if raw_model.startswith("anthropic/") else f"anthropic/{raw_model}"
             api_key = settings.ANTHROPIC_API_KEY or os.getenv("ANTHROPIC_API_KEY")
+        elif provider_type == "groq":
+            raw_model = settings.GROQ_MODEL
+            model_name = raw_model if raw_model.startswith("groq/") else f"groq/{raw_model}"
+            api_key = settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY") or os.getenv("GROQ_APIKEY") or os.getenv("groqapikey")
+            if api_key:
+                os.environ["GROQ_API_KEY"] = api_key
+        elif provider_type == "openrouter":
+            raw_model = settings.OPENROUTER_MODEL
+            model_name = raw_model if raw_model.startswith("openrouter/") else f"openrouter/{raw_model}"
+            api_key = settings.OPENROUTER_API_KEY or os.getenv("OPENROUTER_API_KEY") or os.getenv("openrouter_api_key")
+            if api_key:
+                os.environ["OPENROUTER_API_KEY"] = api_key
         else: # Default to openai
             model_name = settings.OPENAI_MODEL
             api_key = settings.OPENAI_API_KEY or os.getenv("OPENAI_API_KEY")
@@ -93,9 +145,13 @@ class LiteLLMAIProvider(BaseAIProvider):
         kwargs = {
             "model": model_name,
             "messages": messages,
-            "response_format": {"type": "json_object"},
             "temperature": 0.0,
         }
+
+        # Groq's server-side JSON mode validator fails on Qwen / reasoning models when response_format is forced.
+        # Only pass response_format for non-Groq providers.
+        if provider_type != "groq":
+            kwargs["response_format"] = {"type": "json_object"}
 
         if api_key:
             kwargs["api_key"] = api_key
@@ -130,11 +186,32 @@ class LiteLLMAIProvider(BaseAIProvider):
 
         start_time = time.time()
         try:
-            response = litellm.completion(**kwargs)
+            try:
+                response = litellm.completion(**kwargs)
+            except Exception as call_err:
+                err_msg = str(call_err)
+                # Dynamic fallback: if Groq or any provider returns json_validate_failed, retry without response_format
+                if "json_validate_failed" in err_msg or "Failed to validate JSON" in err_msg:
+                    if "response_format" in kwargs:
+                        logger_service.log_sync(
+                            event="AI Provider JSON Validation Fallback",
+                            level="WARNING",
+                            category="AI_PROVIDER",
+                            provider=provider_type,
+                            model_name=model_name,
+                            message=f"JSON validation failed for {model_name}. Retrying completion without forced response_format parameter."
+                        )
+                        kwargs.pop("response_format", None)
+                        response = litellm.completion(**kwargs)
+                    else:
+                        raise
+                else:
+                    raise
+
             latency_ms = round((time.time() - start_time) * 1000, 2)
             
-            raw_text = response.choices[0].message.content
-            data = json.loads(raw_text)
+            raw_text = response.choices[0].message.content or ""
+            data = extract_json_from_text(raw_text)
             
             # Extract token usage telemetry
             usage = getattr(response, "usage", None)
@@ -185,3 +262,4 @@ class LiteLLMAIProvider(BaseAIProvider):
 
             print(f"LiteLLM Provider Error (Provider: {provider_type}, Model: {model_name}): {e}")
             return InvoiceExtractionSchema()
+

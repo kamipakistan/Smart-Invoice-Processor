@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     MINIO_BUCKET_RAW: str = os.getenv("MINIO_BUCKET_RAW", "raw-invoices")
     MINIO_BUCKET_PROCESSED: str = os.getenv("MINIO_BUCKET_PROCESSED", "processed-invoices")
     
-    # Provider Selection: ollama, openai, gemini, anthropic
+    # Provider Selection: ollama, openai, gemini, anthropic, groq, openrouter
     AI_PROVIDER: str = os.getenv("AI_PROVIDER", "gemini")
 
     # Ollama Model
@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 
+    # Groq Model
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", os.getenv("groq_model", "qwen/qwen3.6-27b")).strip(",").strip('"').strip("'")
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", os.getenv("groqapikey", "")).strip(",").strip('"').strip("'")
+
+    # OpenRouter Model
+    OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", os.getenv("openrouter_model", "google/gemma-4-31b-it:free")).strip(",").strip('"').strip("'")
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", os.getenv("openrouter_api_key", "")).strip(",").strip('"').strip("'")
+
     # Application & Ingestion Settings
     MAX_UPLOAD_SIZE_MB: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "25"))
     MAX_BATCH_FILES: int = int(os.getenv("MAX_BATCH_FILES", "200"))
@@ -70,6 +78,18 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: str = os.getenv("LANGFUSE_SECRET_KEY", "")
     LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "http://localhost:4001")
     LANGFUSE_PUBLIC_HOST: str = os.getenv("LANGFUSE_PUBLIC_HOST", "http://localhost:4001")
+
+    # Authentication & Security Settings
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "changeme-generate-a-real-32-byte-secret")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+    COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "true").lower() in ("true", "1", "yes")
+
+    # Rate Limiting & Account Lockout Settings
+    LOGIN_RATE_LIMIT: str = os.getenv("LOGIN_RATE_LIMIT", "10/minute").strip('"').strip("'")
+    LOGIN_LOCKOUT_ATTEMPTS: int = int(os.getenv("LOGIN_LOCKOUT_ATTEMPTS", "5"))
+    LOGIN_LOCKOUT_MINUTES: int = int(os.getenv("LOGIN_LOCKOUT_MINUTES", "15"))
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

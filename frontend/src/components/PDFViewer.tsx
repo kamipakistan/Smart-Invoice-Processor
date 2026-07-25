@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { ZoomIn, ZoomOut, RotateCw, ExternalLink, FileText } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ZoomIn, ZoomOut, RotateCw, ExternalLink, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { apiFetchBlob } from '../api/client';
 
 interface PDFViewerProps {
   url: string;
@@ -10,16 +11,55 @@ interface PDFViewerProps {
 export default function PDFViewer({ url, fileName, apiBase }: PDFViewerProps) {
   const [zoom, setZoom] = useState<number>(100);
   const [rotation, setRotation] = useState<number>(0);
+  const [blobUrl, setBlobUrl] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 25, 200));
   const handleZoomOut = () => setZoom(prev => Math.max(prev - 25, 50));
   const handleRotate = () => setRotation(prev => (prev + 90) % 360);
 
-  const resolvedUrl = url
-    ? url.startsWith('http://') || url.startsWith('https://')
-      ? url
-      : `${apiBase || ''}${url}`
-    : '';
+  useEffect(() => {
+    if (!url) {
+      setBlobUrl('');
+      return;
+    }
+
+    let isMounted = true;
+    let currentObjUrl = '';
+
+    const fetchPdf = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const resolved = url.startsWith('http://') || url.startsWith('https://')
+          ? url
+          : `${apiBase || ''}${url}`;
+        const blob = await apiFetchBlob(resolved);
+        currentObjUrl = URL.createObjectURL(blob);
+        if (isMounted) {
+          setBlobUrl(currentObjUrl);
+        } else {
+          URL.revokeObjectURL(currentObjUrl);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError('Failed to load PDF document.');
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchPdf();
+
+    return () => {
+      isMounted = false;
+      if (currentObjUrl) {
+        URL.revokeObjectURL(currentObjUrl);
+      }
+    };
+  }, [url, apiBase]);
 
   return (
     <div className="flex flex-col h-full bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
@@ -52,9 +92,9 @@ export default function PDFViewer({ url, fileName, apiBase }: PDFViewerProps) {
           >
             <RotateCw className="w-4 h-4" />
           </button>
-          {resolvedUrl && (
+          {blobUrl && (
             <a
-              href={resolvedUrl}
+              href={blobUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 rounded-lg transition-colors ml-1"
@@ -67,12 +107,22 @@ export default function PDFViewer({ url, fileName, apiBase }: PDFViewerProps) {
       </div>
 
       {/* PDF View Canvas / IFrame */}
-      <div className="flex-1 relative overflow-auto p-2 flex items-center justify-center bg-slate-950/90">
-        {resolvedUrl ? (
+      <div className="flex-1 relative overflow-auto p-2 flex items-center justify-center bg-slate-950/90 min-h-[300px]">
+        {loading ? (
+          <div className="flex flex-col items-center gap-2 text-slate-400 text-xs">
+            <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
+            <span>Loading document...</span>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center gap-2 text-red-400 text-xs p-4 text-center">
+            <AlertCircle className="w-6 h-6 text-red-500" />
+            <span>{error}</span>
+          </div>
+        ) : blobUrl ? (
           <iframe
-            src={`${resolvedUrl}#toolbar=0&navpanes=0`}
+            src={`${blobUrl}#toolbar=0&navpanes=0`}
             title={fileName}
-            className="w-full h-full border-0 rounded-lg transition-transform duration-200"
+            className="w-full h-full border-0 rounded-lg transition-transform duration-200 min-h-[500px]"
             style={{
               transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
               transformOrigin: 'center center'

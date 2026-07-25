@@ -82,3 +82,16 @@ CREATE INDEX IF NOT EXISTS idx_system_logs_category ON system_logs(category);
 CREATE INDEX IF NOT EXISTS idx_system_logs_provider ON system_logs(provider);
 CREATE INDEX IF NOT EXISTS idx_system_logs_invoice_id ON system_logs(invoice_id);
 CREATE INDEX IF NOT EXISTS idx_system_logs_batch_id ON system_logs(batch_id);
+
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(64) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    failed_login_attempts INT DEFAULT 0,
+    locked_until TIMESTAMP WITH TIME ZONE,
+    last_login_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);

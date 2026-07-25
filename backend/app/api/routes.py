@@ -17,8 +17,10 @@ from app.services.minio_service import minio_service
 from app.services.excel_service import generate_flat_excel_report
 from app.services.logger_service import logger_service
 from app.tasks.celery_worker import process_invoice_pipeline
+from app.api.deps import get_current_user
+from app.schemas.auth import UserOut
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 class RejectInvoiceRequest(BaseModel):
     rejection_reason: str
@@ -26,7 +28,8 @@ class RejectInvoiceRequest(BaseModel):
 @router.post("/invoices/upload")
 async def upload_invoices(
     files: List[UploadFile] = File(...),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: UserOut = Depends(get_current_user)
 ):
     """
     Accepts single or batch PDF invoice files (up to 100).
@@ -88,7 +91,7 @@ async def upload_invoices(
     }
 
 @router.get("/invoices/batch/{batch_id}/status", response_model=BatchStatusResponse)
-async def get_batch_status(batch_id: str, db: AsyncSession = Depends(get_async_db)):
+async def get_batch_status(batch_id: str, db: AsyncSession = Depends(get_async_db), current_user: UserOut = Depends(get_current_user)):
     result = await db.execute(select(BatchRecord).where(BatchRecord.id == batch_id))
     batch = result.scalars().first()
     if not batch:
@@ -117,7 +120,8 @@ async def list_invoices(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     date_field: Optional[str] = Query("all", description="all | invoice_date | insertion_date | created_at"),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: UserOut = Depends(get_current_user)
 ):
     query = select(InvoiceHeader).options(selectinload(InvoiceHeader.line_items)).order_by(InvoiceHeader.id.desc())
     
@@ -196,7 +200,7 @@ async def list_invoices(
     return output
 
 @router.get("/invoices/{invoice_id}/document")
-async def get_invoice_document(invoice_id: int, db: AsyncSession = Depends(get_async_db)):
+async def get_invoice_document(invoice_id: int, db: AsyncSession = Depends(get_async_db), current_user: UserOut = Depends(get_current_user)):
     """
     Proxy endpoint to stream PDF invoice document directly from MinIO storage.
     Prevents CORS/host mismatch issues when viewing invoices in the frontend.
@@ -221,7 +225,7 @@ async def get_invoice_document(invoice_id: int, db: AsyncSession = Depends(get_a
         raise HTTPException(status_code=500, detail=f"Failed to fetch document from storage: {str(e)}")
 
 @router.get("/invoices/exceptions")
-async def list_exceptions(db: AsyncSession = Depends(get_async_db)):
+async def list_exceptions(db: AsyncSession = Depends(get_async_db), current_user: UserOut = Depends(get_current_user)):
     """
     Returns list of invoices requiring Human-In-The-Loop review (status = NEEDS_REVIEW).
     """
@@ -231,7 +235,8 @@ async def list_exceptions(db: AsyncSession = Depends(get_async_db)):
 async def update_invoice_review(
     invoice_id: int,
     payload: InvoiceUpdateRequest,
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: UserOut = Depends(get_current_user)
 ):
     """
     HITL endpoint: Accepts operator corrections for missing/unextracted fields,
@@ -292,7 +297,8 @@ async def update_invoice_review(
 async def reject_invoice(
     invoice_id: int,
     payload: RejectInvoiceRequest,
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: UserOut = Depends(get_current_user)
 ):
     """
     HITL Rejection Endpoint: Marks document status as REJECTED and records operator reason.
@@ -314,7 +320,8 @@ async def export_excel(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     date_field: Optional[str] = Query("all", description="all | invoice_date | insertion_date | created_at"),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: UserOut = Depends(get_current_user)
 ):
     """
     Generates and downloads the flat 16-column Excel report for completed/verified invoices filtered by date range and date_field.
@@ -355,7 +362,8 @@ async def list_system_logs(
     end_date: Optional[str] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: UserOut = Depends(get_current_user)
 ):
     """
     Paginated logs endpoint with multi-criteria filtering for system, API, and AI execution logs.
@@ -444,7 +452,7 @@ async def list_system_logs(
     }
 
 @router.get("/logs/stats")
-async def get_log_stats(db: AsyncSession = Depends(get_async_db)):
+async def get_log_stats(db: AsyncSession = Depends(get_async_db), current_user: UserOut = Depends(get_current_user)):
     """
     Returns aggregated metrics and token usage analytics for the Log Tab dashboard.
     """
@@ -477,6 +485,10 @@ async def get_log_stats(db: AsyncSession = Depends(get_async_db)):
         active_model = settings.GEMINI_MODEL
     elif provider_type == "anthropic":
         active_model = settings.ANTHROPIC_MODEL
+    elif provider_type == "groq":
+        active_model = settings.GROQ_MODEL
+    elif provider_type == "openrouter":
+        active_model = settings.OPENROUTER_MODEL
     elif provider_type == "ollama":
         active_model = settings.OLLAMA_MODEL
     else:
@@ -507,7 +519,7 @@ async def get_log_stats(db: AsyncSession = Depends(get_async_db)):
     }
 
 @router.delete("/logs/clear")
-async def clear_logs(days: Optional[int] = Query(None, description="Clear logs older than N days. Omit to clear all."), db: AsyncSession = Depends(get_async_db)):
+async def clear_logs(days: Optional[int] = Query(None, description="Clear logs older than N days. Omit to clear all."), db: AsyncSession = Depends(get_async_db), current_user: UserOut = Depends(get_current_user)):
     """
     Clears system logs. If days parameter is provided, deletes logs older than N days.
     """

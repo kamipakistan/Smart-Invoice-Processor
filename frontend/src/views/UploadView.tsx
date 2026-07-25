@@ -4,6 +4,7 @@ import BatchTracker from '../components/BatchTracker';
 import InvoiceTable from '../components/InvoiceTable';
 import HITLReviewModal from '../components/HITLReviewModal';
 import type { InvoiceHeader } from '../types';
+import { apiFetch } from '../api/client';
 
 interface UploadViewProps {
   apiBase: string;
@@ -21,7 +22,7 @@ export default function UploadView({ apiBase, onUploadComplete }: UploadViewProp
       const url = activeBatchId
         ? `${apiBase}/api/v1/invoices?batch_id=${activeBatchId}`
         : `${apiBase}/api/v1/invoices`;
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
         setInvoices(data);
