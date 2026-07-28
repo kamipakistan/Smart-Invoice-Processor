@@ -25,6 +25,8 @@ export default function ReportsView({ apiBase }: ReportsViewProps) {
   const [startDate, setStartDate] = useState<string>(getPKTDateISO());
   const [endDate, setEndDate] = useState<string>(getPKTDateISO());
   const [dateField, setDateField] = useState<'all' | 'invoice_date' | 'insertion_date' | 'created_at'>('all');
+  const [fbrStatusFilter, setFbrStatusFilter] = useState<string>('');
+  const [processingStatusFilter, setProcessingStatusFilter] = useState<string>('');
   const [invoices, setInvoices] = useState<InvoiceHeader[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -35,6 +37,8 @@ export default function ReportsView({ apiBase }: ReportsViewProps) {
       if (startDate) queryParams.push(`start_date=${startDate}`);
       if (endDate) queryParams.push(`end_date=${endDate}`);
       if (dateField) queryParams.push(`date_field=${dateField}`);
+      if (fbrStatusFilter) queryParams.push(`fbr_status=${fbrStatusFilter}`);
+      if (processingStatusFilter) queryParams.push(`status=${processingStatusFilter}`);
 
       const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
       const res = await apiFetch(`${apiBase}/api/v1/invoices${queryString}`);
@@ -52,7 +56,7 @@ export default function ReportsView({ apiBase }: ReportsViewProps) {
 
   useEffect(() => {
     fetchFilteredInvoices();
-  }, [startDate, endDate, dateField, apiBase]);
+  }, [startDate, endDate, dateField, fbrStatusFilter, processingStatusFilter, apiBase]);
 
   // Preset Date Range Selectors in Pakistan Standard Time
   const setPreset = (preset: 'today' | 'yesterday' | 'week' | 'month' | 'all') => {
@@ -94,7 +98,7 @@ export default function ReportsView({ apiBase }: ReportsViewProps) {
     try {
       const endpoint = `/api/v1/invoices/export?${
         startDate ? `start_date=${startDate}&` : ''
-      }${endDate ? `end_date=${endDate}&` : ''}date_field=${dateField}`;
+      }${endDate ? `end_date=${endDate}&` : ''}date_field=${dateField}${fbrStatusFilter ? `&fbr_status=${fbrStatusFilter}` : ''}${processingStatusFilter ? `&status=${processingStatusFilter}` : ''}`;
       
       const blob = await apiFetchBlob(endpoint);
       const objUrl = URL.createObjectURL(blob);
@@ -186,31 +190,31 @@ export default function ReportsView({ apiBase }: ReportsViewProps) {
           </div>
         </div>
 
-        {/* Dropdown & Date Range Inputs Grid */}
+        {/* Filter Inputs Grid */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
           {/* Dropdown Filter for Field Target Stage */}
-          <div className="md:col-span-4">
+          <div className="md:col-span-3 lg:col-span-2">
             <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1">
               <Tag className="w-3.5 h-3.5 text-cyan-400" />
-              Select Field Target Stage:
+              Date Target:
             </label>
             <select
               value={dateField}
               onChange={e => setDateField(e.target.value as any)}
               className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-3 py-2 text-sm text-white focus:outline-none cursor-pointer font-sans"
             >
-              <option value="all">All Date Stages</option>
-              <option value="invoice_date">Invoice Date</option>
-              <option value="insertion_date">Insertion Date</option>
+              <option value="all">All Dates</option>
+              <option value="invoice_date">Inv. Date</option>
+              <option value="insertion_date">Ins. Date</option>
               <option value="created_at">Created At</option>
             </select>
           </div>
 
           {/* From Date */}
-          <div className="md:col-span-3">
+          <div className="md:col-span-3 lg:col-span-2">
             <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-              From Date (Start - PKT)
+              From (PKT)
             </label>
             <input
               type="date"
@@ -221,10 +225,10 @@ export default function ReportsView({ apiBase }: ReportsViewProps) {
           </div>
 
           {/* To Date */}
-          <div className="md:col-span-3">
+          <div className="md:col-span-3 lg:col-span-2">
             <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-              To Date (End - PKT)
+              To (PKT)
             </label>
             <input
               type="date"
@@ -234,14 +238,51 @@ export default function ReportsView({ apiBase }: ReportsViewProps) {
             />
           </div>
 
+          {/* FBR Status Filter */}
+          <div className="md:col-span-3 lg:col-span-2">
+            <label className="block text-xs font-medium text-slate-300 mb-1">
+              FBR Status
+            </label>
+            <select
+              value={fbrStatusFilter}
+              onChange={e => setFbrStatusFilter(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+            >
+              <option value="">All</option>
+              <option value="Valid">Valid</option>
+              <option value="Edited">Edited</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          {/* Processing Status Filter */}
+          <div className="md:col-span-3 lg:col-span-2">
+            <label className="block text-xs font-medium text-slate-300 mb-1">
+              Proc. Status
+            </label>
+            <select
+              value={processingStatusFilter}
+              onChange={e => setProcessingStatusFilter(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
+            >
+              <option value="">All</option>
+              <option value="COMPLETED,MANUALLY_VERIFIED">Ready to Export (Verified+Completed)</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="MANUALLY_VERIFIED">Verified</option>
+              <option value="NEEDS_REVIEW">Needs Review</option>
+              <option value="FAILED">Failed</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
+          </div>
+
           {/* Apply Filter Button */}
-          <div className="md:col-span-2">
+          <div className="md:col-span-3 lg:col-span-2">
             <button
               onClick={fetchFilteredInvoices}
               className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white font-medium px-4 py-2 rounded-lg text-sm transition-all"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Apply Filter
+              Filter
             </button>
           </div>
         </div>

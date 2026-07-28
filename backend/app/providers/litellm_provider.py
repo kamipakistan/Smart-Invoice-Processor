@@ -21,7 +21,7 @@ section — ignore the Seller Information section entirely.
 
 Analyze the provided invoice image(s) (one invoice may span multiple page images —
 merge all line items into a single ordered list; do not repeat header fields per page)
-and extract structured JSON matching these 16 fields:
+and extract structured JSON matching these 17 fields:
 
 HEADER FIELDS:
 1. fbr_invoice_no: Unique FBR Invoice Number, e.g. "2389374DIKJ91FN565683" (registration
@@ -32,7 +32,12 @@ HEADER FIELDS:
    to YYYY-MM-DD (e.g. "2026-07-05"). If you cannot confidently parse it, return the
    original string unchanged rather than guessing.
 5. insertion_date: System insertion date, same conversion rule as invoice_date.
-6. line_items: list of objects (see below). Do NOT include the "Total" summary row as
+6. fbr_status: The invoice's validity status, found in the "Invoice Summary" section,
+   labeled "Status:" (e.g. "Valid", "Cancelled", "Edited"). Transcribe verbatim as
+   printed. This is DIFFERENT from "Invoice Type" (e.g. "Sale Invoice") — do not
+   confuse the two, and do not infer this value from the "E"/"C" legend text at the
+   bottom of the page unless the Status field itself is unreadable.
+7. line_items: list of objects (see below). Do NOT include the "Total" summary row as
    a line item.
 
 LINE ITEM FIELDS (per row, excluding the Total row):
@@ -145,7 +150,6 @@ class LiteLLMAIProvider(BaseAIProvider):
         kwargs = {
             "model": model_name,
             "messages": messages,
-            "temperature": 0.0,
         }
 
         # Groq's server-side JSON mode validator fails on Qwen / reasoning models when response_format is forced.
@@ -186,27 +190,43 @@ class LiteLLMAIProvider(BaseAIProvider):
 
         start_time = time.time()
         try:
-            try:
-                response = litellm.completion(**kwargs)
-            except Exception as call_err:
-                err_msg = str(call_err)
-                # Dynamic fallback: if Groq or any provider returns json_validate_failed, retry without response_format
-                if "json_validate_failed" in err_msg or "Failed to validate JSON" in err_msg:
-                    if "response_format" in kwargs:
+            while True:
+                try:
+                    response = litellm.completion(**kwargs)
+                    break
+                except Exception as call_err:
+                    err_msg = str(call_err)
+                    err_msg_lower = err_msg.lower()
+                    modified = False
+
+                    # Fallback 1: Temperature unsupported by model (e.g. OpenAI reasoning / custom models like gpt-5.6-luna, o1, o3)
+                    if "temperature" in kwargs and ("temperature" in err_msg_lower and ("unsupported" in err_msg_lower or "does not support" in err_msg_lower or "unsupported_value" in err_msg_lower)):
+                        logger_service.log_sync(
+                            event="AI Provider Temperature Fallback",
+                            level="WARNING",
+                            category="AI_PROVIDER",
+                            provider=provider_type,
+                            model_name=model_name,
+                            message=f"Model {model_name} does not support custom temperature. Retrying completion without temperature parameter."
+                        )
+                        kwargs.pop("temperature", None)
+                        modified = True
+
+                    # Fallback 2: response_format / JSON mode unsupported or failed validation
+                    if "response_format" in kwargs and ("json_validate_failed" in err_msg or "Failed to validate JSON" in err_msg or ("response_format" in err_msg_lower and ("unsupported" in err_msg_lower or "not supported" in err_msg_lower))):
                         logger_service.log_sync(
                             event="AI Provider JSON Validation Fallback",
                             level="WARNING",
                             category="AI_PROVIDER",
                             provider=provider_type,
                             model_name=model_name,
-                            message=f"JSON validation failed for {model_name}. Retrying completion without forced response_format parameter."
+                            message=f"JSON format mode rejected for {model_name}. Retrying completion without forced response_format parameter."
                         )
                         kwargs.pop("response_format", None)
-                        response = litellm.completion(**kwargs)
-                    else:
-                        raise
-                else:
-                    raise
+                        modified = True
+
+                    if not modified:
+                        raise call_err
 
             latency_ms = round((time.time() - start_time) * 1000, 2)
             

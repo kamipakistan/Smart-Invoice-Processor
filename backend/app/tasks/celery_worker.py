@@ -96,6 +96,7 @@ def process_invoice_pipeline(self, invoice_id: int):
         header.business_name = cleaned_data.get("business_name")
         header.invoice_date = cleaned_data.get("invoice_date")
         header.insertion_date = cleaned_data.get("insertion_date") or get_pkt_today_iso()
+        header.fbr_status = cleaned_data.get("fbr_status")
         header.status = status
         header.ai_confidence = confidence
         header.missing_fields_summary = json.dumps(missing_reasons) if missing_reasons else None

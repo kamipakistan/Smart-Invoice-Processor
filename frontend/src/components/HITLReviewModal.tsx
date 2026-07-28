@@ -23,6 +23,7 @@ export default function HITLReviewModal({
 
   // Header form states
   const [fbrInvoiceNo, setFbrInvoiceNo] = useState<string>(invoice.fbr_invoice_no || '');
+  const [fbrStatus, setFbrStatus] = useState<string>(invoice.fbr_status || '');
   const [registrationNo, setRegistrationNo] = useState<string>(invoice.registration_no || '');
   const [businessName, setBusinessName] = useState<string>(invoice.business_name || '');
   const [invoiceDate, setInvoiceDate] = useState<string>(invoice.invoice_date || '');
@@ -45,6 +46,7 @@ export default function HITLReviewModal({
       setBusinessName(invoice.business_name || '');
       setInvoiceDate(invoice.invoice_date || '');
       setInsertionDate(invoice.insertion_date || new Date().toISOString().split('T')[0]);
+      setFbrStatus(invoice.fbr_status || '');
       setLineItems(invoice.line_items || []);
       setShowRejectDialog(false);
       setRejectionReason('');
@@ -93,6 +95,7 @@ export default function HITLReviewModal({
       business_name: businessName,
       invoice_date: invoiceDate,
       insertion_date: insertionDate,
+      fbr_status: fbrStatus,
       line_items: lineItems,
     };
 
@@ -219,10 +222,10 @@ export default function HITLReviewModal({
             )}
 
             <form onSubmit={handleSubmitApprove} className="space-y-6">
-              {/* Section 1: 5 Header Fields */}
+              {/* Section 1: 6 Header Fields */}
               <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 space-y-4">
                 <h4 className="text-sm font-semibold text-cyan-400 uppercase tracking-wider">
-                  Header Fields (1–5)
+                  Header Fields (1–6)
                 </h4>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -291,6 +294,20 @@ export default function HITLReviewModal({
                       value={insertionDate}
                       onChange={e => setInsertionDate(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded-lg px-3 py-2 text-sm text-white focus:outline-none font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1">
+                      6. FBR Status <span className="text-cyan-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={fbrStatus}
+                      onChange={e => setFbrStatus(e.target.value)}
+                      placeholder="e.g. Valid, Cancelled, Edited"
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded-lg px-3 py-2 text-sm text-white focus:outline-none"
                     />
                   </div>
                 </div>

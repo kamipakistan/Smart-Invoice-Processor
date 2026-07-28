@@ -124,9 +124,9 @@ function MainApp() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex overflow-hidden font-sans">
+    <div className="h-screen w-full bg-slate-950 text-slate-100 flex overflow-hidden font-sans">
       {/* Mobile Header Bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-30 bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="p-1.5 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-lg">
             <Layers className="w-5 h-5 text-white" />
@@ -151,6 +151,14 @@ function MainApp() {
           </button>
         </div>
       </div>
+
+      {/* Mobile Drawer Backdrop Overlay */}
+      {mobileDrawerOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setMobileDrawerOpen(false)}
+        />
+      )}
 
       {/* Left Sidebar Navigation Component */}
       <aside
@@ -231,10 +239,10 @@ function MainApp() {
           </nav>
         </div>
 
-        {/* Sidebar Footer: System Health */}
+        {/* Sidebar Footer */}
         <div className="p-4 border-t border-slate-800 bg-slate-950/40">
           {!sidebarCollapsed ? (
-            <div className="space-y-2">
+            <div className="space-y-4">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400 flex items-center gap-1.5">
                   <Database className="w-3.5 h-3.5 text-slate-500" />
@@ -245,16 +253,40 @@ function MainApp() {
                   {backendOnline ? 'ONLINE' : 'OFFLINE'}
                 </span>
               </div>
-              <div className="text-[10px] text-slate-500 font-mono">
-                Port {activePort} • Postgres: 5434
-              </div>
+              
+              {user && (
+                <div className="flex items-center justify-between pt-3 border-t border-slate-800/50">
+                  <div className="flex items-center gap-2 text-xs text-slate-200 font-medium">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold uppercase shadow-sm">
+                      {user.username.charAt(0)}
+                    </div>
+                    <span className="truncate max-w-[90px]">{user.username}</span>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
+                    title="Sign Out"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="flex justify-center">
+            <div className="flex flex-col items-center gap-6">
               <span
                 className={`w-3 h-3 rounded-full ${backendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`}
                 title={backendOnline ? 'Backend Online' : 'Backend Offline'}
               />
+              {user && (
+                <button
+                  onClick={logout}
+                  className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -277,25 +309,6 @@ function MainApp() {
               <Cpu className="w-4 h-4 text-cyan-400" />
               Vision AI Multi-Model Ingestion Engine
             </span>
-
-            {user && (
-              <div className="flex items-center gap-3 pl-2 border-l border-slate-800">
-                <div className="flex items-center gap-2 text-xs text-slate-200 font-medium">
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold uppercase shadow-sm">
-                    {user.username.charAt(0)}
-                  </div>
-                  <span className="hidden sm:inline">{user.username}</span>
-                </div>
-                <button
-                  onClick={logout}
-                  className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800/80 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-medium"
-                  title="Sign Out"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span className="hidden md:inline">Logout</span>
-                </button>
-              </div>
-            )}
           </div>
         </header>
 

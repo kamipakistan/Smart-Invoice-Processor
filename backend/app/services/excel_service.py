@@ -17,7 +17,8 @@ def generate_flat_excel_report(invoices_data: List[Dict[str, Any]]) -> bytes:
             "Registration No": inv.get("registration_no") or "",
             "Business Name": inv.get("business_name") or "",
             "Invoice Date": inv.get("invoice_date") or "",
-            "Insertion Date": inv.get("insertion_date") or ""
+            "Insertion Date": inv.get("insertion_date") or "",
+            "FBR Status": inv.get("fbr_status") or ""
         }
         
         line_items = inv.get("line_items", [])
@@ -29,6 +30,7 @@ def generate_flat_excel_report(invoices_data: List[Dict[str, Any]]) -> bytes:
                 "Business Name": hdr["Business Name"],
                 "Invoice Date": hdr["Invoice Date"],
                 "Insertion Date": hdr["Insertion Date"],
+                "FBR Status": hdr["FBR Status"],
                 "HS Code": "",
                 "Product Description": "",
                 "Sales Type": "",
@@ -50,6 +52,7 @@ def generate_flat_excel_report(invoices_data: List[Dict[str, Any]]) -> bytes:
                     "Business Name": hdr["Business Name"],
                     "Invoice Date": hdr["Invoice Date"],
                     "Insertion Date": hdr["Insertion Date"],
+                    "FBR Status": hdr["FBR Status"],
                     "HS Code": item.get("hs_code") or "",
                     "Product Description": item.get("product_description") or "",
                     "Sales Type": item.get("sales_type") or "",
@@ -72,6 +75,7 @@ def generate_flat_excel_report(invoices_data: List[Dict[str, Any]]) -> bytes:
         "Business Name",
         "Invoice Date",
         "Insertion Date",
+        "FBR Status",
         "HS Code",
         "Product Description",
         "Sales Type",
@@ -113,11 +117,11 @@ def generate_flat_excel_report(invoices_data: List[Dict[str, Any]]) -> bytes:
             cell.font = header_font
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
-        for row in worksheet.iter_rows(min_row=2, max_row=len(flat_rows) + 1, min_col=1, max_col=16):
+        for row in worksheet.iter_rows(min_row=2, max_row=len(flat_rows) + 1, min_col=1, max_col=17):
             for cell in row:
                 cell.font = regular_font
                 cell.border = thin_border
-                if cell.column_letter in ['J', 'L', 'M', 'N', 'O', 'P']: # Numeric columns
+                if cell.column_letter in ['K', 'M', 'N', 'O', 'P', 'Q']: # Numeric columns
                     cell.alignment = Alignment(horizontal="right", vertical="center")
                 else:
                     cell.alignment = Alignment(horizontal="left", vertical="center")

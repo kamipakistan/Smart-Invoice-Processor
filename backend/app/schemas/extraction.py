@@ -20,6 +20,7 @@ class InvoiceExtractionSchema(BaseModel):
     business_name: Optional[str] = Field(None, description="Buyer Business Name")
     invoice_date: Optional[str] = Field(None, description="Invoice Date (YYYY-MM-DD)")
     insertion_date: Optional[str] = Field(None, description="Insertion Date (YYYY-MM-DD)")
+    fbr_status: Optional[str] = Field(None, description="FBR invoice validity status: Valid / Cancelled / Edited")
     line_items: List[LineItemSchema] = Field(default_factory=list, description="Extracted line items")
 
 class InvoiceHeaderResponse(BaseModel):
@@ -36,6 +37,7 @@ class InvoiceHeaderResponse(BaseModel):
     business_name: Optional[str] = None
     invoice_date: Optional[str] = None
     insertion_date: Optional[str] = None
+    fbr_status: Optional[str] = Field(None, description="FBR invoice validity status: Valid / Cancelled / Edited")
     
     line_items: List[LineItemSchema] = []
 
@@ -48,6 +50,7 @@ class InvoiceUpdateRequest(BaseModel):
     business_name: Optional[str] = None
     invoice_date: Optional[str] = None
     insertion_date: Optional[str] = None
+    fbr_status: Optional[str] = Field(None, description="FBR invoice validity status: Valid / Cancelled / Edited")
     line_items: List[LineItemSchema] = []
 
 class BatchStatusResponse(BaseModel):

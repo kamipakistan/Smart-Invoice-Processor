@@ -116,6 +116,7 @@ async def get_batch_status(batch_id: str, db: AsyncSession = Depends(get_async_d
 @router.get("/invoices")
 async def list_invoices(
     status: Optional[str] = None,
+    fbr_status: Optional[str] = None,
     batch_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -126,7 +127,12 @@ async def list_invoices(
     query = select(InvoiceHeader).options(selectinload(InvoiceHeader.line_items)).order_by(InvoiceHeader.id.desc())
     
     if status:
-        query = query.where(InvoiceHeader.status == status)
+        if "," in status:
+            query = query.where(InvoiceHeader.status.in_(status.split(",")))
+        else:
+            query = query.where(InvoiceHeader.status == status)
+    if fbr_status:
+        query = query.where(InvoiceHeader.fbr_status == fbr_status)
     if batch_id:
         query = query.where(InvoiceHeader.batch_id == batch_id)
         
@@ -177,6 +183,7 @@ async def list_invoices(
             "business_name": h.business_name,
             "invoice_date": h.invoice_date,
             "insertion_date": h.insertion_date,
+            "fbr_status": h.fbr_status,
             "pdf_url": pdf_url,
             "line_items": [
                 {
@@ -316,6 +323,8 @@ async def reject_invoice(
 
 @router.get("/invoices/export")
 async def export_excel(
+    status: Optional[str] = None,
+    fbr_status: Optional[str] = None,
     batch_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -327,6 +336,8 @@ async def export_excel(
     Generates and downloads the flat 16-column Excel report for completed/verified invoices filtered by date range and date_field.
     """
     invoices_list = await list_invoices(
+        status=status,
+        fbr_status=fbr_status,
         batch_id=batch_id,
         start_date=start_date,
         end_date=end_date,
@@ -334,8 +345,11 @@ async def export_excel(
         db=db
     )
     
-    # Filter out failed, pending, or rejected records
-    valid_invoices = [inv for inv in invoices_list if inv["status"] in ["COMPLETED", "MANUALLY_VERIFIED", "NEEDS_REVIEW"]]
+    # Filter out failed, pending, or rejected records if no specific status is requested
+    if not status:
+        valid_invoices = [inv for inv in invoices_list if inv["status"] in ["COMPLETED", "MANUALLY_VERIFIED", "NEEDS_REVIEW"]]
+    else:
+        valid_invoices = invoices_list
     
     if not valid_invoices:
         raise HTTPException(status_code=400, detail="No processed invoice data available for the selected date range.")

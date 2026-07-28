@@ -77,6 +77,7 @@ export default function InvoiceTable({
             <th className="px-4 py-3">Registration No</th>
             <th className="px-4 py-3">Business Name</th>
             <th className="px-4 py-3">Inv. Date</th>
+            <th className="px-4 py-3">FBR Status</th>
             <th className="px-4 py-3">Items</th>
             <th className="px-4 py-3">Status</th>
             <th className="px-4 py-3 text-right">Actions</th>
@@ -100,6 +101,23 @@ export default function InvoiceTable({
               </td>
               <td className="px-4 py-3 font-mono text-slate-400">
                 {inv.invoice_date || <span className="text-slate-600 italic">Missing</span>}
+              </td>
+              <td className="px-4 py-3">
+                {inv.fbr_status ? (
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                    inv.fbr_status.toLowerCase() === 'valid'
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      : inv.fbr_status.toLowerCase() === 'cancelled'
+                      ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                      : inv.fbr_status.toLowerCase() === 'edited'
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                  }`}>
+                    {inv.fbr_status}
+                  </span>
+                ) : (
+                  <span className="text-slate-600 italic text-xs">Unknown</span>
+                )}
               </td>
               <td className="px-4 py-3 font-mono text-slate-300">
                 {inv.line_items ? inv.line_items.length : 0}

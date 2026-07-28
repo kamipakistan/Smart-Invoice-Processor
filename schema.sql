@@ -22,12 +22,13 @@ CREATE TABLE IF NOT EXISTS invoice_headers (
     rejection_reason TEXT, -- Reason provided when rejected by human operator
     ai_confidence FLOAT DEFAULT 0.0,
     
-    -- 5 Header Fields
+    -- 6 Header Fields
     fbr_invoice_no VARCHAR(128),
     registration_no VARCHAR(128),
     business_name VARCHAR(255),
     invoice_date VARCHAR(64),
     insertion_date VARCHAR(64),
+    fbr_status VARCHAR(32),
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -95,3 +96,6 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+
+-- Migration for existing databases
+ALTER TABLE invoice_headers ADD COLUMN IF NOT EXISTS fbr_status VARCHAR(32);

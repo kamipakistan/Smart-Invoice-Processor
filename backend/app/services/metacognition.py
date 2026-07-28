@@ -141,7 +141,17 @@ class MetacognitionEngine:
         else:
             rules_passed += 1
 
-        # 6. Line Items Validation & Summary Row Filtering
+        # 6. FBR Status Rule
+        rules_evaluated += 1
+        fbr_status = str(cleaned_data.get("fbr_status") or "").strip()
+        if not fbr_status or fbr_status.lower() in ["null", "none", "n/a"]:
+            missing_reasons.append("Header: FBR Status is missing")
+        elif fbr_status.lower() != "valid":
+            missing_reasons.append(f"Header: Invoice status is '{fbr_status}' — requires manual verification before processing.")
+        else:
+            rules_passed += 1
+
+        # 7. Line Items Validation & Summary Row Filtering
         raw_items = cleaned_data.get("line_items") or []
         filtered_items = []
 

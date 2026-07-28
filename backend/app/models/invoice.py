@@ -29,12 +29,13 @@ class InvoiceHeader(Base):
     rejection_reason = Column(Text, nullable=True) # Operator rejection reason
     ai_confidence = Column(Float, default=0.0)
 
-    # 5 Header Fields
+    # 6 Header Fields
     fbr_invoice_no = Column(String(128), index=True, nullable=True)
     registration_no = Column(String(128), nullable=True)
     business_name = Column(String(255), nullable=True)
     invoice_date = Column(String(64), nullable=True)
     insertion_date = Column(String(64), nullable=True)
+    fbr_status = Column(String(32), nullable=True)
 
     created_at = Column(DateTime(timezone=True), default=get_pkt_now)
     updated_at = Column(DateTime(timezone=True), default=get_pkt_now, onupdate=get_pkt_now)

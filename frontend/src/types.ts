@@ -21,12 +21,13 @@ export interface InvoiceHeader {
   rejection_reason?: string | null;
   ai_confidence?: number | null;
 
-  // 5 Header Fields
+  // 6 Header Fields
   fbr_invoice_no?: string | null;
   registration_no?: string | null;
   business_name?: string | null;
   invoice_date?: string | null;
   insertion_date?: string | null;
+  fbr_status?: string | null;
 
   pdf_url: string;
   line_items: LineItem[];
