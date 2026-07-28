@@ -106,6 +106,9 @@ services:
       - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse:3000}
       - LANGFUSE_PUBLIC_HOST=${LANGFUSE_PUBLIC_HOST:-http://localhost:4001}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-changeme-generate-a-real-32-byte-secret}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-7}
       - COOKIE_SECURE=${COOKIE_SECURE:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -153,6 +156,9 @@ services:
       - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse:3000}
       - LANGFUSE_PUBLIC_HOST=${LANGFUSE_PUBLIC_HOST:-http://localhost:4001}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-changeme-generate-a-real-32-byte-secret}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-7}
       - COOKIE_SECURE=${COOKIE_SECURE:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
